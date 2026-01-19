@@ -74,7 +74,6 @@ def fetch_one_quote(source_index=0):
         try:
             params_str = "&".join([f"{k}={v}" for k, v in source["params"].items()])
             url = f"{source['url']}?{params_str}" if params_str else source['url']
-            
             req = urllib.request.Request(url, headers=HEADERS)
             with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as response:
                 data = json.loads(response.read().decode('utf-8'))
@@ -104,6 +103,7 @@ def fetch_quotes_concurrent(count):
             batch_size = min(needed, MAX_WORKERS * 2)
             source_index = random.randint(0, len(API_SOURCES) - 1)
             futures = [executor.submit(fetch_one_quote, source_index) for _ in range(batch_size)]
+            
             round_success = 0
             
             for future in concurrent.futures.as_completed(futures):
@@ -142,7 +142,7 @@ def save_csv(quotes):
         print(f"文件已保存: {OUTPUT_FILE} ({len(quotes)} 条)")
         print("::endgroup::")
         return True
-    except Exception as Actions -> Exception as e:
+    except Exception as e:
         log(f"保存 CSV 失败: {e}", 'error')
         return False
 
