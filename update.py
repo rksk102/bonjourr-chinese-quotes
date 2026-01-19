@@ -20,7 +20,7 @@ HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 def log(message, type='info'):
     timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
     if type == 'error':
-        print(f"::error file={__file__},line={sys._getframe(1].f_lineno}::{message}")
+        print(f"::error file={__file__},line={sys._getframe(1).f_lineno}::{message}")
     elif type == 'warning':
         print(f"::warning::{message}")
     else:
@@ -53,7 +53,6 @@ def fetch_one_quote():
 def fetch_quotes_concurrent(count):
     quotes = []
     seen = set()
-    
     consecutive_failures = 0
     MAX_FAILURES = 30
     
@@ -65,9 +64,7 @@ def fetch_quotes_concurrent(count):
         while len(quotes) < count:
             needed = count - len(quotes)
             batch_size = min(needed, MAX_WORKERS) 
-            
             futures = [executor.submit(fetch_one_quote) for _ in range(batch_size)]
-            
             round_success = 0
             
             for future in concurrent.futures.as_completed(futures):
@@ -86,7 +83,7 @@ def fetch_quotes_concurrent(count):
                 log(f"⚠️ 第 {consecutive_failures} 次尝试未获取到数据，API 可能繁忙或限流...", 'warning')
             else:
                 consecutive_failures = 0
-
+            
             if consecutive_failures >= MAX_FAILURES:
                 log(f"❌ 连续 {MAX_FAILURES} 次获取失败，API 可能已屏蔽此 IP。任务终止。", 'error')
                 break
@@ -132,11 +129,11 @@ def generate_summary(quotes):
             f.write("⚠️ 未获取到数据。")
 
 if __name__ == "__main__":
+
     start_time = time.time()
     
     try:
         data = fetch_quotes_concurrent(TARGET_COUNT)
-        
         if len(data) > 0:
             if save_csv(data):
                 generate_summary(data)
