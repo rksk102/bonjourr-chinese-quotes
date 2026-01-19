@@ -253,7 +253,7 @@ def append_to_csv(new_quotes):
     print("::group::💾 追加新语录到 CSV")
     try:
         with open(OUTPUT_FILE, 'a', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=['text', 'author'])
+            writer = csv.DictWriter(f, fieldnames=['author', 'text])
             
             if os.stat(OUTPUT_FILE).st_size == 0:
                 writer.writeheader()
