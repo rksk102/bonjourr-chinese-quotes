@@ -1,63 +1,43 @@
-name: Update Quotes Daily
+name: Update Quotes Daily (Fast)
 
 on:
   schedule:
     - cron: '0 0 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   update_quotes:
-    name: 🚀 Daily Quote Updater
+    name: ⚡ Fast Updater
     runs-on: ubuntu-latest
     
     steps:
-      - name: 🛠️ Checkout Repository
+      - name: 🛠️ Checkout
         uses: actions/checkout@v4
-        
-      - name: 🐍 Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-          
-      - name: 💿 Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests
-        continue-on-error: false
-      - name: 🏃 Run Update Script
+
+      - name: 🏃 Run Script
         id: run_script
         run: python update.py
-
-      - name: 👀 Check Changes (Git Status)
+        
+      - name: 👀 Check Changes
         if: success()
         run: |
-          echo "📋 当前 Git 状态:"
           git status
           echo ""
-          echo "📄 CSV 文件变化预览:"
-          head -n 5 quotes.csv || echo "文件为空或不存在"
+          echo "📊 数据统计:"
+          wc -l quotes.csv || true
 
-      - name: 📝 Commit and Push Changes
+      - name: 📝 Commit & Push
         if: success()
         run: |
-          # 配置 Git 用户信息
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          
-          # 添加文件并检查是否有变动
           git add quotes.csv
-          
-          # 检查是否有东西需要提交
           if git diff --staged --quiet; then
-            echo "✨ 没有检测到新变化，文件可能未更新（内容重复）。"
+            echo "✨ 没有变化，跳过提交。"
           else
-            echo "📦 检测到变化，正在提交..."
-            git commit -m "📅 [Daily Auto] Update quotes.csv $(date +'%Y-%m-%d')"
+            git commit -m "📅 [Fast Auto] Update quotes.csv $(date +'%Y-%m-%d %H:%M')"
             git push
           fi
-
-      - name: 🚨 Handle Failure
-        if: failure()
-        run: |
-          echo "::error::❌ 任务失败了！请检查上方的 'Run Update Script' 日志。"
-          # 这里可以添加发送通知的代码，比如发邮件或 Telegram
