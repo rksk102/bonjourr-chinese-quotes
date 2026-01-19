@@ -11,43 +11,81 @@ from datetime import datetime
 
 TARGET_COUNT = 100
 OUTPUT_FILE = "quotes.csv"
-MAX_WORKERS = 3 
+MAX_WORKERS = 2
 REQUEST_TIMEOUT = 10
-API_URL = "https://v1.hitokoto.cn/"
 
-HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+API_SOURCES = [
+    {
+        "name": "Hitokoto 国际版",
+        "url": "https://international.v1.hitokoto.cn/",
+        "params": {
+            "c": ["i", "l", "k"],
+            "encode": "json",
+            "min_length": 5,
+            "max_length": 25
+        },
+        "parser": lambda data: {
+            "text": data.get("hitokoto", "").strip(),
+            "author": data.get("from", "佚名").strip()
+        }
+    },
+    {
+        "name": "今日诗词",
+        "url": "https://v2.jinrishici.com/one.json",
+        "params": {},
+        "parser": lambda data: {
+            "text": data.get("data", {}).get("content", "").strip(),
+            "author": data.get("data", {}).get("origin", {}).get("author", "佚名").strip()
+        }
+    },
+    {
+        "name": "一言旧版",
+        "url": "https://hitokoto.cn/api.php",
+        "params": {
+            "c": "i",
+            "encode": "json"
+        },
+        "parser": lambda data: {
+            "text": data.get("hitokoto", "").strip(),
+            "author": data.get("from", "佚名").strip()
+        }
+    }
+]
+
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+}
 
 def log(message, type='info'):
-    timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+    timestamp = datetime.now().strftime("%H:%M:%S")
     if type == 'error':
-        print(f"::error file={__file__},line={sys._getframe(1).f_lineno}::{message}")
+        print(f"::error::{message}")
     elif type == 'warning':
         print(f"::warning::{message}")
     else:
         print(f"[{timestamp}] {message}")
 
-def fetch_one_quote():
-    params = {
-        'c': ['i', 'l', 'k'],
-        'encode': 'json',
-        'min_length': 5,
-        'max_length': 25
-    }
-    full_url = f"{API_URL}?{'&'.join([f'{k}={v}' for k, v in params.items()])}"
-    
-    req = urllib.request.Request(full_url, headers=HEADERS)
-    
-    try:
-        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as response:
-            data = json.loads(response.read().decode('utf-8'))
+def fetch_one_quote(source_index=0):
+    """
+    从指定索引的 API 源获取一条语录，失败则尝试下一个源
+    """
+    for i in range(source_index, len(API_SOURCES)):
+        source = API_SOURCES[i]
+        try:
+            params_str = "&".join([f"{k}={v}" for k, v in source["params"].items()])
+            url = f"{source['url']}?{params_str}" if params_str else source['url']
             
-            text = data.get('hitokoto', '').strip()
-            author = data.get('from', '佚名').strip()
-            
-            if text:
-                return {'text': text, 'author': author}
-    except Exception as e:
-        pass
+            req = urllib.request.Request(url, headers=HEADERS)
+            with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                parsed = source["parser"](data)
+                text = parsed.get("text", "")
+                author = parsed.get("author", "佚名")
+                
+                if text:
+                    return {'text': text, 'author': author}
+        except Exception as e:
+            pass
     return None
 
 def fetch_quotes_concurrent(count):
@@ -56,15 +94,16 @@ def fetch_quotes_concurrent(count):
     consecutive_failures = 0
     MAX_FAILURES = 30
     
-    log(f"🚀 启动 {MAX_WORKERS} 线程(礼貌模式) 获取 {count} 条语录...", 'info')
+    log(f"🚀 启动 {MAX_WORKERS} 线程获取 {count} 条语录...", 'info')
     
     start_time = time.time()
     
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         while len(quotes) < count:
             needed = count - len(quotes)
-            batch_size = min(needed, MAX_WORKERS) 
-            futures = [executor.submit(fetch_one_quote) for _ in range(batch_size)]
+            batch_size = min(needed, MAX_WORKERS * 2)
+            source_index = random.randint(0, len(API_SOURCES) - 1)
+            futures = [executor.submit(fetch_one_quote, source_index) for _ in range(batch_size)]
             round_success = 0
             
             for future in concurrent.futures.as_completed(futures):
@@ -80,14 +119,14 @@ def fetch_quotes_concurrent(count):
             
             if round_success == 0:
                 consecutive_failures += 1
-                log(f"⚠️ 第 {consecutive_failures} 次尝试未获取到数据，API 可能繁忙或限流...", 'warning')
+                log(f"⚠️ 第 {consecutive_failures} 次尝试未获取到数据，切换 API 源...", 'warning')
             else:
                 consecutive_failures = 0
             
             if consecutive_failures >= MAX_FAILURES:
-                log(f"❌ 连续 {MAX_FAILURES} 次获取失败，API 可能已屏蔽此 IP。任务终止。", 'error')
+                log(f"❌ 连续 {MAX_FAILURES} 次获取失败，所有 API 源可能都不可用。任务终止。", 'error')
                 break
-                
+    
     elapsed = time.time() - start_time
     print() 
     log(f"✅ 结束。获取 {len(quotes)} 条，耗时: {elapsed:.2f} 秒", 'info')
@@ -103,7 +142,7 @@ def save_csv(quotes):
         print(f"文件已保存: {OUTPUT_FILE} ({len(quotes)} 条)")
         print("::endgroup::")
         return True
-    except Exception as e:
+    except Exception as Actions -> Exception as e:
         log(f"保存 CSV 失败: {e}", 'error')
         return False
 
@@ -113,9 +152,10 @@ def generate_summary(quotes):
         return
 
     with open(summary_path, 'w', encoding='utf-8') as f:
-        f.write("# ⚡ 礼貌模式更新报告\n\n")
+        f.write("# ⚡ 多源网络抓取报告\n\n")
         f.write(f"**⏱️ 耗时**: {time.time() - start_time:.2f} 秒\n\n")
         f.write(f"**📊 数量**: `{len(quotes)}` 条 \n\n")
+        f.write(f"**🌐 来源**: 多源轮询 (Hitokoto 国际版、今日诗词等) \n\n")
         
         if len(quotes) > 0:
             f.write("### 🎲 预览\n")
@@ -129,11 +169,11 @@ def generate_summary(quotes):
             f.write("⚠️ 未获取到数据。")
 
 if __name__ == "__main__":
-
     start_time = time.time()
     
     try:
         data = fetch_quotes_concurrent(TARGET_COUNT)
+        
         if len(data) > 0:
             if save_csv(data):
                 generate_summary(data)
@@ -145,5 +185,5 @@ if __name__ == "__main__":
             sys.exit(1)
             
     except Exception as e:
-        log(f"严重错误: {e}", 'error')
+        log(f"端到端错误: {e}", 'error')
         sys.exit(1)
