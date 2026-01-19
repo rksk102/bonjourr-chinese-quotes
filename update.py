@@ -11,45 +11,123 @@ from datetime import datetime
 
 TARGET_COUNT = 100
 OUTPUT_FILE = "quotes.csv"
-MAX_WORKERS = 2
+MAX_WORKERS = 3
 REQUEST_TIMEOUT = 10
-
 API_SOURCES = [
     {
-        "name": "Hitokoto 国际版",
+        "name": "一言（官方）",
+        "url": "https://v1.hitokoto.cn/",
+        "params": {"c": ["i", "l", "k"], "encode": "json", "min_length": 5, "max_length": 30},
+        "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
+    },
+    {
+        "name": "一言（国际版）",
         "url": "https://international.v1.hitokoto.cn/",
-        "params": {
-            "c": ["i", "l", "k"],
-            "encode": "json",
-            "min_length": 5,
-            "max_length": 25
-        },
-        "parser": lambda data: {
-            "text": data.get("hitokoto", "").strip(),
-            "author": data.get("from", "佚名").strip()
-        }
+        "params": {"c": ["i", "l", "k"], "encode": "json", "min_length": 5, "max_length": 30},
+        "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
+    },
+    {
+        "name": "一言（CN镜像）",
+        "url": "https://cn.hitokoto.cn/",
+        "params": {"c": ["i", "l", "k"], "encode": "json", "min_length": 5, "max_length": 30},
+        "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
+    },
+    {
+        "name": "一言（备用域名）",
+        "url": "https://sentence-api.qpchan.com/",
+        "params": {"c": ["i", "l", "k"], "encode": "json", "min_length": 5, "max_length": 30},
+        "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
+    },
+    {
+        "name": "一言（PHP版）",
+        "url": "https://hitokoto.cn/api.php",
+        "params": {"c": "i", "encode": "json"},
+        "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
+    },
+    {
+        "name": "一言诗词",
+        "url": "https://v1.hitokoto.cn/",
+        "params": {"c": "k", "encode": "json"},
+        "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
+    },
+    {
+        "name": "一言文学",
+        "url": "https://v1.hitokoto.cn/",
+        "params": {"c": "l", "encode": "json"},
+        "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
+    },
+    {
+        "name": "一言文言",
+        "url": "https://v1.hitokoto.cn/",
+        "params": {"c": "d", "encode": "json"},
+        "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
     },
     {
         "name": "今日诗词",
         "url": "https://v2.jinrishici.com/one.json",
         "params": {},
-        "parser": lambda data: {
-            "text": data.get("data", {}).get("content", "").strip(),
-            "author": data.get("data", {}).get("origin", {}).get("author", "佚名").strip()
-        }
+        "parser": lambda data: {"text": data.get("data", {}).get("content", "").strip(), "author": data.get("data", {}).get("origin", {}).get("author", "佚名").strip()}
     },
     {
-        "name": "一言旧版",
-        "url": "https://hitokoto.cn/api.php",
-        "params": {
-            "c": "i",
-            "encode": "json"
-        },
-        "parser": lambda data: {
-            "text": data.get("hitokoto", "").strip(),
-            "author": data.get("from", "佚名").strip()
-        }
-    }
+        "name": "古诗词API",
+        "url": "https://api.gushi.ci/all.json",
+        "params": {},
+        "parser": lambda data: {"text": data[0].get("content", "").strip() if isinstance(data, list) and len(data) > 0 else "", "author": data[0].get("origin", {}).get("author", "佚名").strip() if isinstance(data, list) and len(data) > 0 else "佚名"}
+    },
+    {
+        "name": "爱词建诗词",
+        "url": "https://ciapi.xygeng.cn/one",
+        "params": {},
+        "parser": lambda data: {"text": data.get("content", "").strip(), "author": data.get("author", "").strip() if data.get("author") else "佚名"}
+    },
+    {
+        "name": "随机句子",
+        "url": "https://api.xygeng.cn/one",
+        "params": {},
+        "parser": lambda data: {"text": data.get("text", "").strip(), "author": data.get("author", "佚名").strip()}
+    },
+    {
+        "name": "句子迷API",
+        "url": "https://api.juzimi.com/api/random",
+        "params": {},
+        "parser": lambda data: {"text": data.get("content", "").strip(), "author": data.get("author", "句子迷").strip()}
+    },
+    {
+        "name": "一言代理",
+        "url": "https://api.vvhan.com/api/一言",
+        "params": {},
+        "parser": lambda data: {"text": data.get("data", {}).get("hitokoto", "").strip(), "author": data.get("data", {}).get("from", "佚名").strip()}
+    },
+    {
+        "name": "励志名言",
+        "url": "https://api.oick.cn/dutang/api.php",
+        "params": {},
+        "parser": lambda data: {"text": data.get("text", "").strip(), "author": data.get("author", "佚名").strip()}
+    },
+    {
+        "name": "名人名言",
+        "url": "https://api.oick.cn/mingyan/api.php",
+        "params": {},
+        "parser": lambda data: {"text": data.get("text", "").strip(), "author": data.get("author", "佚名").strip()}
+    },
+    {
+        "name": "心灵鸡汤",
+        "url": "https://api.oick.cn/yulu/api.php",
+        "params": {},
+        "parser": lambda data: {"text": data.get("text", "").strip(), "author": data.get("author", "佚名").strip()}
+    },
+    {
+        "name": "文艺句子",
+        "url": "https://api.oick.cn/wenyi/api.php",
+        "params": {},
+        "parser": lambda data: {"text": data.get("text", "").strip(), "author": data.get("author", "佚名").strip()}
+    },
+    {
+        "name": "随机情话",
+        "url": "https://api.uomg.com/api/rand.qinghua",
+        "params": {},
+        "parser": lambda data: {"text": data.get("text", "").strip(), "author": "情话API"}
+    },
 ]
 
 HEADERS = {
@@ -94,13 +172,17 @@ def fetch_quotes_concurrent(count):
     MAX_FAILURES = 30
     
     log(f"🚀 启动 {MAX_WORKERS} 线程获取 {count} 条语录...", 'info')
+    log(f"📚 已配置 {len(API_SOURCES)} 个 API 源", 'info')
     
     start_time = time.time()
+
+    source_stats = {i: 0 for i in range(len(API_SOURCES))}
     
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         while len(quotes) < count:
             needed = count - len(quotes)
             batch_size = min(needed, MAX_WORKERS * 2)
+
             source_index = random.randint(0, len(API_SOURCES) - 1)
             futures = [executor.submit(fetch_one_quote, source_index) for _ in range(batch_size)]
             
@@ -114,6 +196,7 @@ def fetch_quotes_concurrent(count):
                         seen.add(unique_key)
                         quotes.append(result)
                         round_success += 1
+                        source_stats[source_index] += 1
                         sys.stdout.write(f"\r   进度: {len(quotes)}/{count}")
                         sys.stdout.flush()
             
@@ -130,6 +213,12 @@ def fetch_quotes_concurrent(count):
     elapsed = time.time() - start_time
     print() 
     log(f"✅ 结束。获取 {len(quotes)} 条，耗时: {elapsed:.2f} 秒", 'info')
+    
+    log("📊 各源贡献统计:", 'info')
+    for idx, count in source_stats.items():
+        if count > 0:
+            log(f"  - {API_SOURCES[idx]['name']}: {count} 条", 'info')
+    
     return quotes
 
 def save_csv(quotes):
@@ -140,6 +229,9 @@ def save_csv(quotes):
             writer.writeheader()
             writer.writerows(quotes)
         print(f"文件已保存: {OUTPUT_FILE} ({len(quotes)} 条)")
+        print("前 3 条预览:")
+        for i, q in enumerate(quotes[:3]):
+            print(f"  {i+1}. {q['text']}")
         print("::endgroup::")
         return True
     except Exception as e:
@@ -155,18 +247,19 @@ def generate_summary(quotes):
         f.write("# ⚡ 多源网络抓取报告\n\n")
         f.write(f"**⏱️ 耗时**: {time.time() - start_time:.2f} 秒\n\n")
         f.write(f"**📊 数量**: `{len(quotes)}` 条 \n\n")
-        f.write(f"**🌐 来源**: 多源轮询 (Hitokoto 国际版、今日诗词等) \n\n")
+        f.write(f"**📚 API源数量**: `{len(API_SOURCES)}` 个 \n\n")
         
-        if len(quotes) > 0:
-            f.write("### 🎲 预览\n")
-            f.write("| 内容 | 出处 |\n")
-            f.write("| :--- | :--- |\n")
-            for q in random.sample(quotes, min(5, len(quotes))):
-                safe_text = q['text'].replace('|', '\\|')
-                safe_author = q['author'].replace('|', '\\|')
-                f.write(f"| {safe_text} | {safe_author} |\n")
-        else:
-            f.write("⚠️ 未获取到数据。")
+        f.write("### 🌐 已配置的 API 源\n")
+        for i, source in enumerate(API_SOURCES):
+            f.write(f"{i+1}. **{source['name']}**: `{source['url']}`\n")
+        
+        f.write("\n### 🎲 随机预览\n")
+        f.write("| 内容 | 出处 |\n")
+        f.write("| :--- | :--- |\n")
+        for q in random.sample(quotes, min(5, len(quotes))):
+            safe_text = q['text'].replace('|', '\\|')
+            safe_author = q['author'].replace('|', '\\|')
+            f.write(f"| {safe_text} | {safe_author} |\n")
 
 if __name__ == "__main__":
     start_time = time.time()
