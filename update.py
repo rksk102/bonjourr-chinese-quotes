@@ -13,7 +13,6 @@ TARGET_COUNT = 15
 OUTPUT_FILE = "quotes.csv"
 MAX_WORKERS = 3
 REQUEST_TIMEOUT = 10
-
 API_SOURCES = [
     {
         "name": "一言（官方）",
@@ -63,6 +62,7 @@ API_SOURCES = [
         "params": {"c": "d", "encode": "json"},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
     },
+
     {
         "name": "今日诗词",
         "url": "https://v2.jinrishici.com/one.json",
@@ -81,6 +81,7 @@ API_SOURCES = [
         "params": {},
         "parser": lambda data: {"text": data.get("content", "").strip(), "author": data.get("author", "").strip() if data.get("author") else "佚名"}
     },
+
     {
         "name": "随机句子",
         "url": "https://api.xygeng.cn/one",
@@ -99,6 +100,7 @@ API_SOURCES = [
         "params": {},
         "parser": lambda data: {"text": data.get("data", {}).get("hitokoto", "").strip(), "author": data.get("data", {}).get("from", "佚名").strip()}
     },
+
     {
         "name": "励志名言",
         "url": "https://api.oick.cn/dutang/api.php",
@@ -117,6 +119,7 @@ API_SOURCES = [
         "params": {},
         "parser": lambda data: {"text": data.get("text", "").strip(), "author": data.get("author", "佚名").strip()}
     },
+
     {
         "name": "文艺句子",
         "url": "https://api.oick.cn/wenyi/api.php",
@@ -222,7 +225,7 @@ def fetch_new_quotes(count, existing_set):
                 result = future.result()
                 if result:
                     unique_key = f"{result['text']}-{result['author']}"
-                    if unique_key not in existing_set
+                    if unique_key not in existing_set:
                         new_keys = {f"{q['text']}-{q['author']}" for q in new_quotes}
                         if unique_key not in new_keys:
                             existing_set.add(unique_key)
@@ -249,16 +252,18 @@ def fetch_new_quotes(count, existing_set):
 def append_to_csv(new_quotes):
     """
     将新语录追加到 CSV 文件
+    修复：交换列顺序为 author, text 以适应 Bonjourr
     """
     print("::group::💾 追加新语录到 CSV")
     try:
         with open(OUTPUT_FILE, 'a', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=['author', 'text'])
-            
-            if os.stat(OUTPUT_FILE).st_size == 0:
+
+            if not os.path.exists(OUTPUT_FILE) or os.stat(OUTPUT_FILE).st_size == 0:
                 writer.writeheader()
-            
-            writer.writerows(new_quotes)
+
+            for q in new_quotes:
+                writer.writerow(q)
         
         print(f"✅ 已追加 {len(new_quotes)} 条到 {OUTPUT_FILE}")
         print("新增的语录预览:")
@@ -281,23 +286,22 @@ def generate_summary(new_quotes, total_count):
         f.write(f"**🆕 今日新增**: `{len(new_quotes)}` 条 \n\n")
         f.write(f"**📚 总计**: `{total_count}` 条 \n\n")
         
-        if len(new_quotes) > 0:
-            f.write("### ✨ 今日新增预览\n")
-            f.write("| 内容 | 出处 |\n")
-            f.write("| :--- | :--- |\n")
-            for q in new_quotes[:min(5, len(new_quotes))]:
-                safe_text = q['text'].replace('|', '\\|')
-                safe_author = q['author'].replace('|', '\\|')
-                f.write(f"| {safe_text} | {safe_author} |\n")
+        f.write("### 🎲 今日新增预览\n")
+        f.write("| 内容 | 出处 |\n")
+        f.write("| :--- | :--- |\n")
+        for q in new_quotes[:min(5, len(new_quotes))]:
+            safe_text = q['text'].replace('|', '\\|')
+            safe_author = q['author'].replace('|', '\\|')
+            f.write(f"| {safe_text} | {safe_author} |\n")
 
 if __name__ == "__main__":
     start_time = time.time()
     
     try:
         existing_set, existing_count = load_existing_quotes()
-        
+
         new_quotes = fetch_new_quotes(TARGET_COUNT, existing_set)
-        
+
         if len(new_quotes) > 0:
             if append_to_csv(new_quotes):
                 total_count = existing_count + len(new_quotes)
