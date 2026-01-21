@@ -74,3 +74,4 @@ def main() -> None:
 curl -L -o quotes.csv {raw}
 # 或（CDN 加速）
 curl -L -o quotes.csv {jsdelivr}
+"""
