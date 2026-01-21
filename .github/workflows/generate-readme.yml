@@ -23,63 +23,48 @@ jobs:
           persist-credentials: true
           fetch-depth: 0
 
-      - name: Workflow marker (must appear)
-        shell: bash
-        run: |
-          set -euxo pipefail
-          echo "::notice::WORKFLOW_VERSION=2026-01-21-v2"
-          echo "::group::Show workflow file (head)"
-          sed -n '1,160p' .github/workflows/generate-readme.yml || true
-          echo "::endgroup::"
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Environment summary
-        shell: bash
-        run: |
-          set -euxo pipefail
-          echo "::group::Versions"
-          python -V
-          git --version
-          echo "::endgroup::"
-
-          echo "::group::Repo"
-          echo "actor=${GITHUB_ACTOR}"
-          echo "ref=${GITHUB_REF}"
-          echo "sha=${GITHUB_SHA}"
-          echo "workspace=${GITHUB_WORKSPACE}"
-          git status -sb || true
-          echo "::endgroup::"
-
-          echo "::group::Files (top)"
-          ls -la
-          echo "::endgroup::"
-
-      - name: Generate README
+      - name: Generate README (with Summary)
         shell: bash
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          set -euxo pipefail
+          set -euo pipefail
           python scripts/generate_readme.py
 
-      - name: Show diff (README)
+      - name: Diff report (README)
         shell: bash
         run: |
           set -euo pipefail
-          echo "::group::README diff"
-          git diff -- README.md || true
+          echo "::group::Diff summary"
+          git diff --stat -- README.md || true
           echo "::endgroup::"
+
+          echo "::group::README diff (first 200 lines)"
+          git diff -- README.md | sed -n '1,200p' || true
+          echo "::endgroup::"
+
+          # 把 diff 统计也写到 Summary，让“界面更好看”
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            {
+              echo "## Diff（README.md）"
+              echo ""
+              echo "\`\`\`"
+              git diff --stat -- README.md || true
+              echo "\`\`\`"
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Commit & push if changed
         shell: bash
         run: |
-          set -euxo pipefail
-
+          set -euo pipefail
           if git diff --quiet; then
             echo "::notice::No changes. Skip commit."
             exit 0
@@ -96,19 +81,20 @@ jobs:
         if: failure()
         shell: bash
         run: |
-          set -euxo pipefail
-          echo "::group::Last git status"
+          set -euo pipefail
+          echo "::group::Repo status"
           git status -sb || true
           echo "::endgroup::"
 
-          echo "::group::Recent commits"
-          git --no-pager log -n 10 --oneline || true
-          echo "::endgroup::"
-
-          echo "::group::README head"
-          sed -n '1,160p' README.md || true
-          echo "::endgroup::"
-
           echo "::group::Workspace tree (depth=3)"
-          find . -maxdepth 3 -type f | sed 's|^\./||' | sort
+          find . -maxdepth 3 -type f | sed 's|^\./||' | sort | sed -n '1,400p'
           echo "::endgroup::"
+
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            {
+              echo "## 失败调试信息"
+              echo ""
+              echo "- 请展开日志中的 **Repo status** / **Workspace tree** 分组查看细节。"
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
