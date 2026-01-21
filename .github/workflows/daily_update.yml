@@ -18,7 +18,7 @@ jobs:
         
       - name: 🏃 Run Script
         id: run_script
-        run: python update.py
+        run: python scripts/update.py
         
       - name: 👀 Check Changes
         if: success()
