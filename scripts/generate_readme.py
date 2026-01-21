@@ -1,8 +1,41 @@
 from __future__ import annotations
+
 import csv
 import os
+import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+
+def gha_group(title: str):
+    print(f"::group::{title}")
+
+def gha_endgroup():
+    print("::endgroup::")
+
+def gha_notice(msg: str):
+    print(f"::notice::{msg}")
+
+def gha_warning(msg: str):
+    print(f"::warning::{msg}")
+
+def gha_error(msg: str, file: str | None = None, line: int | None = None, col: int | None = None):
+    meta = []
+    if file:
+        meta.append(f"file={file}")
+    if line:
+        meta.append(f"line={line}")
+    if col:
+        meta.append(f"col={col}")
+    prefix = f"::error {','.join(meta)}::" if meta else "::error::"
+    print(prefix + msg)
+
+def preview_file(p: Path, n: int = 5) -> str:
+    try:
+        lines = p.read_text(encoding="utf-8").splitlines()
+    except UnicodeDecodeError:
+        lines = p.read_text(encoding="utf-8-sig").splitlines()
+    head = lines[:n]
+    return "\n".join(f"{i+1:>3}: {s}" for i, s in enumerate(head))
 
 def count_rows(csv_file: Path) -> int:
     with csv_file.open("r", encoding="utf-8", newline="") as f:
@@ -15,22 +48,50 @@ def count_rows(csv_file: Path) -> int:
     has_header = any(k in header for k in ("quote", "text", "author", "content"))
     return max(0, len(rows) - (1 if has_header else 0))
 
-def main() -> None:
+def main() -> int:
     repo = os.getenv("GITHUB_REPOSITORY", "YOUR_GITHUB_NAME/bonjourr-chinese-quotes")
     branch = os.getenv("DEFAULT_BRANCH", "main")
-
     csv_rel = os.getenv("QUOTES_CSV", "quotes.csv")
     csv_path = Path(csv_rel)
     readme_path = Path("README.md")
 
-    raw = f"https://raw.githubusercontent.com/{repo}/{branch}/{csv_rel}"
-    jsdelivr = f"https://cdn.jsdelivr.net/gh/{repo}@{branch}/{csv_rel}"
-    ghproxy = f"https://ghproxy.com/{raw}"
+    gha_group("Inputs")
+    print("repo         =", repo)
+    print("branch       =", branch)
+    print("quotes_csv   =", csv_rel)
+    print("cwd          =", Path.cwd())
+    gha_endgroup()
+
+    if not csv_path.exists():
+        gha_error(f"CSV not found: {csv_rel}", file=csv_rel)
+        gha_group("Workspace files (depth=2)")
+        for p in sorted(Path(".").glob("*")):
+            print(p)
+            if p.is_dir():
+                for pp in sorted(p.glob("*"))[:50]:
+                    print("  ", pp)
+        gha_endgroup()
+        return 2
+
+    gha_group("CSV preview (first 5 lines)")
+    print(preview_file(csv_path, 5))
+    gha_endgroup()
 
     n = count_rows(csv_path)
 
     now_utc = datetime.now(timezone.utc)
     now_cn = now_utc.astimezone(timezone(timedelta(hours=8)))
+
+    raw = f"https://raw.githubusercontent.com/{repo}/{branch}/{csv_rel}"
+    jsdelivr = f"https://cdn.jsdelivr.net/gh/{repo}@{branch}/{csv_rel}"
+    ghproxy = f"https://ghproxy.com/{raw}"
+
+    gha_group("Computed outputs")
+    print("count_rows   =", n)
+    print("raw          =", raw)
+    print("jsdelivr     =", jsdelivr)
+    print("ghproxy      =", ghproxy)
+    gha_endgroup()
 
     md = f"""<!-- AUTO-GENERATED: DO NOT EDIT MANUALLY -->
 <div align="center">
