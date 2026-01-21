@@ -28,7 +28,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Generate README (with Summary)
+      - name: Run generator
         shell: bash
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -37,26 +37,49 @@ jobs:
           set -euo pipefail
           python scripts/generate_readme.py
 
-      - name: Diff report (README)
+      - name: Diff & diagnostics
         shell: bash
         run: |
           set -euo pipefail
-          echo "::group::Diff summary"
+
+          echo "::group::git diff --stat"
           git diff --stat -- README.md || true
           echo "::endgroup::"
 
-          echo "::group::README diff (first 200 lines)"
-          git diff -- README.md | sed -n '1,200p' || true
+          echo "::group::README head (first 80 lines)"
+          sed -n '1,80p' README.md || true
           echo "::endgroup::"
 
-          # 把 diff 统计也写到 Summary，让“界面更好看”
+          # 把诊断写进 Summary（更好看）
           if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
             {
-              echo "## Diff（README.md）"
+              echo "## 诊断信息（Workflow）"
+              echo ""
+              echo "### Diff（README.md）"
               echo ""
               echo "\`\`\`"
               git diff --stat -- README.md || true
               echo "\`\`\`"
+              echo ""
+              echo "<details><summary>展开：README 头部预览（前 80 行）</summary>"
+              echo ""
+              echo "\`\`\`markdown"
+              sed -n '1,80p' README.md || true
+              echo "\`\`\`"
+              echo ""
+              echo "</details>"
+              echo ""
+              echo "<details><summary>展开：运行环境</summary>"
+              echo ""
+              echo "\`\`\`text"
+              python -V
+              git --version
+              echo "actor=${GITHUB_ACTOR}"
+              echo "ref=${GITHUB_REF}"
+              echo "sha=${GITHUB_SHA}"
+              echo "\`\`\`"
+              echo ""
+              echo "</details>"
               echo ""
             } >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -65,6 +88,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           if git diff --quiet; then
             echo "::notice::No changes. Skip commit."
             exit 0
@@ -77,24 +101,24 @@ jobs:
           git commit -m "chore: auto-generate README [skip ci]"
           git push
 
-      - name: Debug dump (only on failure)
+      - name: Failure dump
         if: failure()
         shell: bash
         run: |
           set -euo pipefail
-          echo "::group::Repo status"
+          echo "::group::git status"
           git status -sb || true
           echo "::endgroup::"
 
-          echo "::group::Workspace tree (depth=3)"
+          echo "::group::tree (depth=3)"
           find . -maxdepth 3 -type f | sed 's|^\./||' | sort | sed -n '1,400p'
           echo "::endgroup::"
 
           if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
             {
-              echo "## 失败调试信息"
+              echo "## ❌ 失败信息（Failure dump）"
               echo ""
-              echo "- 请展开日志中的 **Repo status** / **Workspace tree** 分组查看细节。"
+              echo "- 请展开日志中的 **git status** / **tree** 分组查看详细原因。"
               echo ""
             } >> "$GITHUB_STEP_SUMMARY"
           fi
