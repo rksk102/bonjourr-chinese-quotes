@@ -29,21 +29,77 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Environment summary
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "::group::Versions"
+          python -V
+          git --version
+          echo "::endgroup::"
+
+          echo "::group::Repo"
+          echo "actor=${GITHUB_ACTOR}"
+          echo "ref=${GITHUB_REF}"
+          echo "sha=${GITHUB_SHA}"
+          echo "workspace=${GITHUB_WORKSPACE}"
+          git status -sb || true
+          echo "::endgroup::"
+
+          echo "::group::Files (top)"
+          ls -la
+          echo "::endgroup::"
+
       - name: Generate README
+        shell: bash
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
+          set -euxo pipefail
           python scripts/generate_readme.py
 
-      - name: Commit & push if changed
+      - name: Show diff (README)
+        shell: bash
         run: |
+          set -euxo pipefail
+          echo "::group::git diff -- README.md"
+          git diff -- README.md || true
+          echo "::endgroup::"
+
+      - name: Commit & push if changed
+        shell: bash
+        run: |
+          set -euxo pipefail
           if git diff --quiet; then
-            echo "No changes."
+            echo "::notice::No changes. Skip commit."
             exit 0
           fi
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
           git add README.md
           git commit -m "chore: auto-generate README [skip ci]"
           git push
+
+      - name: Debug dump (only on failure)
+        if: failure()
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "::group::Last git status"
+          git status -sb || true
+          echo "::endgroup::"
+
+          echo "::group::Recent commits"
+          git --no-pager log -n 10 --oneline || true
+          echo "::endgroup::"
+
+          echo "::group::README head"
+          sed -n '1,120p' README.md || true
+          echo "::endgroup::"
+
+          echo "::group::Workspace tree (depth=3)"
+          find . -maxdepth 3 -type f | sed 's|^\./||' | sort
+          echo "::endgroup::"
