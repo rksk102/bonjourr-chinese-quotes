@@ -70,8 +70,8 @@ jobs:
       - name: Show diff (README)
         shell: bash
         run: |
-          set -euxo pipefail
-          echo "::group::git diff -- README.md"
+          set -euo pipefail
+          echo "::group::README diff"
           git diff -- README.md || true
           echo "::endgroup::"
 
