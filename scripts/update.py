@@ -80,13 +80,12 @@ API_SOURCES = [
         "params": {},
         "parser": lambda data: {"text": data.get("content", "").strip(), "author": data.get("author", "").strip() if data.get("author") else "佚名"}
     },
-
     {
         "name": "随机句子",
         "url": "https://api.xygeng.cn/one",
         "params": {},
         "parser": lambda data: {"text": data.get("text", "").strip(), "author": data.get("author", "佚名").strip()}
-    }，
+    },
     {
         "name": "句子迷API",
         "url": "https://api.juzimi.com/api/random",
