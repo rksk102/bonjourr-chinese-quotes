@@ -149,14 +149,16 @@ def log(message, type='info'):
 
 def load_existing_quotes():
     """
-    读取现有的 CSV 文件，返回去重集合（用于后续去重）
+    读取现有的 CSV 文件，返回：
+    1. existing_set: 用于去重的集合
+    2. existing_rows: 包含所有完整数据的列表（用于保留和回写）
     """
     existing_set = set()
-    existing_count = 0
+    existing_rows = []
     
     if not os.path.exists(OUTPUT_FILE):
         log(f"📁 文件 {OUTPUT_FILE} 不存在，将创建新文件", 'info')
-        return existing_set, 0
+        return existing_set, existing_rows
     
     try:
         with open(OUTPUT_FILE, 'r', encoding='utf-8') as f:
@@ -167,12 +169,25 @@ def load_existing_quotes():
                 if text:
                     unique_key = f"{text}-{author}"
                     existing_set.add(unique_key)
-                    existing_count += 1
-        log(f"📚 已加载 {existing_count} 条历史语录", 'info')
+                    existing_rows.append({'author': author, 'text': text})
+        log(f"📚 已加载 {len(existing_rows)} 条历史语录", 'info')
     except Exception as e:
         log(f"⚠️ 读取现有文件失败: {e}，将创建新文件", 'warning')
-    
-    return existing_set, existing_count
+    return existing_set, existing_rows
+
+def prune_old_quotes(existing_rows, count_to_remove):
+    """
+    随机删除指定数量的旧语录
+    """
+    current_count = len(existing_rows)
+    if current_count <= count_to_remove:
+        log(f"⚠️ 当前语录只有 {current_count} 条，少于或等于要删除的 {count_to_remove} 条，不清空，保留全部。", 'warning')
+        return existing_rows
+    log(f"✂️ 正在随机删除 {count_to_remove} 条旧语录...", 'info')
+    random.shuffle(existing_rows)
+    kept_rows = existing_rows[:current_count - count_to_remove]
+    log(f"📉 删除完毕，剩余 {len(kept_rows)} 条历史语录", 'info')
+    return kept_rows
 
 def fetch_one_quote(source_index=0):
     """
@@ -183,20 +198,16 @@ def fetch_one_quote(source_index=0):
         try:
             params_str = "&".join([f"{k}={v}" for k, v in source["params"].items()])
             url = f"{source['url']}?{params_str}" if params_str else source['url']
-            
             req = urllib.request.Request(url, headers=HEADERS)
             with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as response:
                 data = json.loads(response.read().decode('utf-8'))
-                
                 parsed = source["parser"](data)
                 text = parsed.get("text", "")
                 author = parsed.get("author", "佚名")
-                
                 if text:
                     return {'text': text, 'author': author}
         except Exception as e:
             pass
-    
     return None
 
 def fetch_new_quotes(count, existing_set):
@@ -206,21 +217,16 @@ def fetch_new_quotes(count, existing_set):
     new_quotes = []
     consecutive_failures = 0
     MAX_FAILURES = 20
-    
     log(f"🚀 开始获取 {count} 条新语录...", 'info')
-    
     start_time = time.time()
     
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         while len(new_quotes) < count:
             needed = count - len(new_quotes)
             batch_size = min(needed, MAX_WORKERS * 2)
-            
-            source_index = random.randint(0, len(API_SOURCES) - 1)
+            source_index = random.randint(0， len(API_SOURCES) - 1)
             futures = [executor.submit(fetch_one_quote, source_index) for _ in range(batch_size)]
-            
             round_success = 0
-            
             for future in concurrent.futures.as_completed(futures):
                 result = future.result()
                 if result:
@@ -233,42 +239,30 @@ def fetch_new_quotes(count, existing_set):
                             round_success += 1
                             sys.stdout.write(f"\r   进度: {len(new_quotes)}/{count}")
                             sys.stdout.flush()
-            
             if round_success == 0:
                 consecutive_failures += 1
                 log(f"⚠️ 第 {consecutive_failures} 次尝试未获取到新数据", 'warning')
             else:
                 consecutive_failures = 0
-            
             if consecutive_failures >= MAX_FAILURES:
                 log(f"❌ 连续 {MAX_FAILURES} 次失败，终止获取", 'error')
                 break
-    
     elapsed = time.time() - start_time
     print()
     log(f"✅ 获取完成！新增 {len(new_quotes)} 条，耗时: {elapsed:.2f} 秒", 'info')
     return new_quotes
 
-def append_to_csv(new_quotes):
+def rewrite_csv(all_quotes):
     """
-    将新语录追加到 CSV 文件
-    修复：交换列顺序为 author, text 以适应 Bonjourr
+    覆盖写入 CSV 文件（包含旧数据的剩余部分 + 新数据）
     """
-    print("::group::💾 追加新语录到 CSV")
+    print("::group::💾 重写 CSV 文件")
     try:
-        with open(OUTPUT_FILE, 'a', newline='', encoding='utf-8') as f:
+        with open(OUTPUT_FILE, 'w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=['author', 'text'])
-
-            if not os.path.exists(OUTPUT_FILE) or os.stat(OUTPUT_FILE).st_size == 0:
-                writer.writeheader()
-
-            for q in new_quotes:
-                writer.writerow(q)
-        
-        print(f"✅ 已追加 {len(new_quotes)} 条到 {OUTPUT_FILE}")
-        print("新增的语录预览:")
-        for i, q in enumerate(new_quotes[:3]):
-            print(f"  {i+1}. {q['text']}")
+            writer.writeheader()
+            writer.writerows(all_quotes)
+        print(f"✅ 文件已更新，当前总条数: {len(all_quotes)}")
         print("::endgroup::")
         return True
     except Exception as e:
@@ -279,13 +273,11 @@ def generate_summary(new_quotes, total_count):
     summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
     if not summary_path:
         return
-
     with open(summary_path, 'w', encoding='utf-8') as f:
         f.write("# 📅 每日语录更新报告\n\n")
         f.write(f"**⏰ 更新时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} \n\n")
         f.write(f"**🆕 今日新增**: `{len(new_quotes)}` 条 \n\n")
         f.write(f"**📚 总计**: `{total_count}` 条 \n\n")
-        
         f.write("### 🎲 今日新增预览\n")
         f.write("| 内容 | 出处 |\n")
         f.write("| :--- | :--- |\n")
@@ -298,20 +290,20 @@ if __name__ == "__main__":
     start_time = time.time()
     
     try:
-        existing_set, existing_count = load_existing_quotes()
-
+        existing_set, existing_rows = load_existing_quotes()
+        if len(existing_rows) >= TARGET_COUNT: 
+            existing_rows = prune_old_quotes(existing_rows, TARGET_COUNT)
+            existing_set = {f"{row['text']}-{row['author']}" for row in existing_rows}
         new_quotes = fetch_new_quotes(TARGET_COUNT, existing_set)
-
         if len(new_quotes) > 0:
-            if append_to_csv(new_quotes):
-                total_count = existing_count + len(new_quotes)
-                generate_summary(new_quotes, total_count)
+            final_list = existing_rows + new_quotes
+            if rewrite_csv(final_list):
+                generate_summary(new_quotes, len(final_list))
                 log("🎉 任务完成！", 'info')
             else:
                 sys.exit(1)
         else:
-            log("⚠️ 没有获取到新语录，文件保持不变", 'warning')
-            
+            log("⚠️ 没有获取到新语录，文件保持不变", 'warning') 
     except Exception as e:
         log(f"严重错误: {e}", 'error')
         sys.exit(1)
