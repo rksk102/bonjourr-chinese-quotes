@@ -1,4 +1,4 @@
-name: Update Quotes Daily (Premium)
+name: "🦄 Update Quotes Daily"
 
 on:
   workflow_dispatch:
