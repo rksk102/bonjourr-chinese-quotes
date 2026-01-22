@@ -6,7 +6,7 @@
 <p><b>中文语录数据集（CSV）</b> · 适用于 Bonjourr / 新标签页扩展 / 个人项目</p>
 
 <p>
-  <img alt="badge" src="https://img.shields.io/badge/quotes-90-111827?logo=files&logoColor=white"> <img alt="badge" src="https://img.shields.io/badge/size~6%20KB-374151"> <img alt="badge" src="https://img.shields.io/badge/format-CSV-0ea5e9"> <img alt="badge" src="https://img.shields.io/badge/updated-2026-01-22%2002:37:09%20UTC-10b981">
+  <img alt="badge" src="https://img.shields.io/badge/quotes-90-111827?logo=files&logoColor=white"> <img alt="badge" src="https://img.shields.io/badge/size~6%20KB-374151"> <img alt="badge" src="https://img.shields.io/badge/format-CSV-0ea5e9"> <img alt="badge" src="https://img.shields.io/badge/updated-2026-01-22%2011:48:19%20UTC-10b981">
 </p>
 
 <p>
@@ -48,7 +48,7 @@
     <tr><td>条目数</td><td><b>90</b></td></tr>
     <tr><td>文件大小</td><td><b>~6 KB</b></td></tr>
     <tr><td>校验（SHA-256）</td><td><code>23c131a0a40a1a1eb7c2…</code></td></tr>
-    <tr><td>最近生成</td><td><b>2026-01-22 02:37:09 UTC</b> / <b>2026-01-22 10:37:09 UTC+8</b></td></tr>
+    <tr><td>最近生成</td><td><b>2026-01-22 11:48:19 UTC</b> / <b>2026-01-22 19:48:19 UTC+8</b></td></tr>
   </tbody>
 </table>
 
