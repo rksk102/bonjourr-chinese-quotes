@@ -27,106 +27,35 @@ API_SOURCES = [
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
     },
     {
-        "name": "一言（CN镜像）",
-        "url": "https://cn.hitokoto.cn/",
-        "params": {"c": ["i", "l", "k"], "encode": "json", "min_length": 5, "max_length": 30},
-        "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
-    },
-    {
-        "name": "一言（备用域名）",
-        "url": "https://sentence-api.qpchan.com/",
-        "params": {"c": ["i", "l", "k"], "encode": "json", "min_length": 5, "max_length": 30},
-        "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
-    },
-    {
-        "name": "一言（PHP版）",
-        "url": "https://hitokoto.cn/api.php",
+        "name": "一言（诗词分类）",
+        "url": "https://v1.hitokoto.cn/",
         "params": {"c": "i", "encode": "json"},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
     },
     {
-        "name": "一言诗词",
-        "url": "https://v1.hitokoto.cn/",
-        "params": {"c": "k", "encode": "json"},
-        "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
-    },
-    {
-        "name": "一言文学",
-        "url": "https://v1.hitokoto.cn/",
-        "params": {"c": "l", "encode": "json"},
-        "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
-    },
-    {
-        "name": "一言文言",
+        "name": "一言（文学分类）",
         "url": "https://v1.hitokoto.cn/",
         "params": {"c": "d", "encode": "json"},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
     },
     {
-        "name": "今日诗词",
-        "url": "https://v2.jinrishici.com/one.json",
-        "params": {},
-        "parser": lambda data: {"text": data.get("data", {}).get("content", "").strip(), "author": data.get("data", {}).get("origin", {}).get("author", "佚名").strip()}
+        "name": "韩小韩一言",
+        "url": "https://api.vvhan.com/api/hitokoto",
+        "params": {"type": "json"},
+        "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
     },
     {
-        "name": "古诗词API",
-        "url": "https://api.gushi.ci/all.json",
-        "params": {},
-        "parser": lambda data: {"text": data[0].get("content", "").strip() if isinstance(data, list) and len(data) > 0 else "", "author": data[0].get("origin", {}).get("author", "佚名").strip() if isinstance(data, list) and len(data) > 0 else "佚名"}
-    },
-    {
-        "name": "爱词建诗词",
-        "url": "https://ciapi.xygeng.cn/one",
-        "params": {},
-        "parser": lambda data: {"text": data.get("content", "").strip(), "author": data.get("author", "").strip() if data.get("author") else "佚名"}
-    },
-    {
-        "name": "随机句子",
+        "name": "夏柔随机文案",
         "url": "https://api.xygeng.cn/one",
         "params": {},
-        "parser": lambda data: {"text": data.get("text", "").strip(), "author": data.get("author", "佚名").strip()}
-    },
-    {
-        "name": "句子迷API",
-        "url": "https://api.juzimi.com/api/random",
-        "params": {},
-        "parser": lambda data: {"text": data.get("content", "").strip(), "author": data.get("author", "句子迷").strip()}
-    },
-    {
-        "name": "一言代理",
-        "url": "https://api.vvhan.com/api/一言",
-        "params": {},
-        "parser": lambda data: {"text": data.get("data", {}).get("hitokoto", "").strip(), "author": data.get("data", {}).get("from", "佚名").strip()}
+        "parser": lambda data: {"text": data.get("data", {}).get("content", "").strip(), "author": data.get("data", {}).get("origin", "佚名").strip()}
     },
     {
         "name": "励志名言",
         "url": "https://api.oick.cn/dutang/api.php",
         "params": {},
-        "parser": lambda data: {"text": data.get("text", "").strip(), "author": data.get("author", "佚名").strip()}
-    },
-    {
-        "name": "名人名言",
-        "url": "https://api.oick.cn/mingyan/api.php",
-        "params": {},
-        "parser": lambda data: {"text": data.get("text", "").strip(), "author": data.get("author", "佚名").strip()}
-    },
-    {
-        "name": "心灵鸡汤",
-        "url": "https://api.oick.cn/yulu/api.php",
-        "params": {},
-        "parser": lambda data: {"text": data.get("text", "").strip(), "author": data.get("author", "佚名").strip()}
-    },
-    {
-        "name": "文艺句子",
-        "url": "https://api.oick.cn/wenyi/api.php",
-        "params": {},
-        "parser": lambda data: {"text": data.get("text", "").strip(), "author": data.get("author", "佚名").strip()}
-    },
-    {
-        "name": "随机情话",
-        "url": "https://api.uomg.com/api/rand.qinghua",
-        "params": {},
-        "parser": lambda data: {"text": data.get("text", "").strip(), "author": "情话API"}
+        "parser": lambda data: {"text": json.loads(data) if isinstance(data, str) else data, "author": "佚名"} 
+        "parser": lambda data: {"text": data.get("text") or data, "author": "佚名"} 
     },
 ]
 
