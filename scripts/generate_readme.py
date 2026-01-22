@@ -2,343 +2,241 @@ from __future__ import annotations
 import csv
 import hashlib
 import os
+import sys
+import time
 import random
+import traceback
+import re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+class Colors:
+    HEADER = '\033[95m'
+    BLUE = '\033[94m'
+    CYAN = '\033[96m'
+    GREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
-def notice(msg: str) -> None:
-    print(f"::notice::{msg}")
-
-def warn(msg: str) -> None:
-    print(f"::warning::{msg}")
-
-def error(msg: str, file: str | None = None) -> None:
-    meta = f" file={file}" if file else ""
-    print(f"::error{meta}::{msg}")
-
-def group(title: str) -> None:
-    print(f"::group::{title}")
-
-def endgroup() -> None:
-    print("::endgroup::")
+class Logger:
+    @staticmethod
+    def banner(msg: str):
+        print(f"\n{Colors.HEADER}{Colors.BOLD}{'='*60}")
+        print(f" {msg}")
+        print(f"{'='*60}{Colors.ENDC}\n")
+    @staticmethod
+    def section(msg: str):
+        print(f"\n{Colors.CYAN}➤ {Colors.BOLD}{msg}{Colors.ENDC}")
+    @staticmethod
+    def info(msg: str, label: str = "INFO"):
+        print(f"{Colors.BLUE}[{label}]{Colors.ENDC} {msg}")
+    @staticmethod
+    def success(msg: str):
+        print(f"{Colors.GREEN}[SUCCESS]{Colors.ENDC} {msg}")
+    @staticmethod
+    def warning(msg: str):
+        print(f"::warning::{msg}")
+        print(f"{Colors.WARNING}[WARN]{Colors.ENDC} {msg}")
+    @staticmethod
+    def error(msg: str):
+        print(f"::error::{msg}")
+        print(f"{Colors.FAIL}[ERROR]{Colors.ENDC} {msg}")
+    @staticmethod
+    def group(title: str):
+        print(f"::group::{title}")
+    @staticmethod
+    def endgroup():
+        print("::endgroup::")
 
 def read_text_smart(p: Path) -> str:
     try:
         return p.read_text(encoding="utf-8")
     except UnicodeDecodeError:
+        Logger.info(f"UTF-8 failed, trying UTF-8-SIG for {p.name}", "ENCODING")
         return p.read_text(encoding="utf-8-sig")
 
 def sha256_file(p: Path) -> str:
     h = hashlib.sha256()
     with p.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+        for chunk in iter(lambda: f.read(4096), b""):
             h.update(chunk)
     return h.hexdigest()
 
-def file_size_kb(p: Path) -> int:
-    return int((p.stat().st_size + 1023) // 1024)
+def extract_old_stats(readme_content: str) -> int:
+    """尝试从旧的 README 中提取之前的行数，用于对比"""
+    match = re.search(r'badge/quotes-(\d+)-', readme_content)
+    return int(match.group(1)) if match else 0
 
-def csv_rows(csv_path: Path) -> list[list[str]]:
-    try:
-        f = csv_path.open("r", encoding="utf-8", newline="")
-    except UnicodeDecodeError:
-        f = csv_path.open("r", encoding="utf-8-sig", newline="")
-    with f:
-        reader = csv.reader(f)
-        return [r for r in reader if any(cell.strip() for cell in r)]
+def load_data(csv_path: Path) -> tuple[list[list[str]], dict]:
+    stats = {"total_rows": 0, "valid_data_rows": 0, "malformed_rows": 0}
+    if not csv_path.exists():
+        raise FileNotFoundError(f"CSV file not found at: {csv_path.resolve()}")
+    Logger.info(f"Reading file: {csv_path}", "IO")
+    raw_content = read_text_smart(csv_path)
+    lines = [line for line in raw_content.splitlines() if line.strip()]
+    stats["total_rows"] = len(lines)
+    rows = []
+    reader = csv.reader(lines)
+    for i, row in enumerate(reader):
+        clean_row = [cell.strip() for cell in row]
+        if any(clean_row):
+            rows.append(clean_row)
+    
+    return rows, stats
 
-def detect_header(rows: list[list[str]]) -> tuple[bool, list[str]]:
-    if not rows:
-        return False, []
-    header = [c.strip() for c in rows[0]]
-    header_l = [c.strip().lower() for c in header]
-    has_header = any(k in header_l for k in ("quote", "text", "content", "author", "from", "source", "出处"))
-    return has_header, header
-
-def safe_md_inline(s: str, limit: int = 240) -> str:
-    x = (s or "").replace("\r", " ").replace("\n", " ").strip()
-    x = x.replace("|", "\\|")
-    if len(x) > limit:
-        x = x[: limit - 1].rstrip() + "…"
-    return x
-
-def build_links(repo: str, branch: str, csv_rel: str) -> dict[str, str]:
-    raw = f"https://raw.githubusercontent.com/{repo}/{branch}/{csv_rel}"
-    jsdelivr = f"https://cdn.jsdelivr.net/gh/{repo}@{branch}/{csv_rel}"
-    ghproxy = f"https://ghproxy.com/{raw}"
-    blob = f"https://github.com/{repo}/blob/{branch}/{csv_rel}"
-    return {"raw": raw, "jsdelivr": jsdelivr, "ghproxy": ghproxy, "blob": blob}
-
-def pick_sample(rows: list[list[str]], prefer_daily: bool = True) -> tuple[str, str]:
-    if not rows:
-        return "", ""
-    has_header, header = detect_header(rows)
-    data = rows[1:] if has_header and len(rows) >= 2 else rows
-    if not data:
-        return "", ""
-
-    seed = datetime.now(timezone.utc).strftime("%Y-%m-%d") if prefer_daily else "static"
-    rnd = random.Random(seed)
-    row = rnd.choice(data)
-
-    header_l = [h.strip().lower() for h in header] if has_header else []
-    quote_idx = -1
-    author_idx = -1
-    if has_header:
-        for i, h in enumerate(header_l):
-            if h in ("quote", "text", "content", "语录", "句子"):
-                quote_idx = i
-            if h in ("author", "from", "source", "出处", "来源"):
-                author_idx = i
-
-    def get(i: int) -> str:
-        return row[i].strip() if 0 <= i < len(row) else ""
-
-    quote = get(quote_idx) if quote_idx != -1 else get(0)
-    author = get(author_idx) if author_idx != -1 else (get(1) if len(row) > 1 else "")
-    return quote, author
-
-def write_step_summary(md: str) -> None:
-    p = os.getenv("GITHUB_STEP_SUMMARY")
-    if not p:
-        return
-    Path(p).write_text(md, encoding="utf-8")
-
-def append_step_summary(md: str) -> None:
-    p = os.getenv("GITHUB_STEP_SUMMARY")
-    if not p:
-        return
-    Path(p).write_text(Path(p).read_text(encoding="utf-8") + md, encoding="utf-8")
-
-def build_readme(
-    repo: str,
-    branch: str,
-    csv_rel: str,
-    links: dict[str, str],
-    rows_count: int,
-    size_kb: int,
-    csv_sha: str,
-    gen_utc: str,
-    gen_cn: str,
-    sample_quote: str,
-    sample_author: str,
+def build_readme_content(
+    ctx: dict,
+    sample: dict
 ) -> str:
-    raw = links["raw"]
-    jsd = links["jsdelivr"]
-    ghp = links["ghproxy"]
-    blob = links["blob"]
     badges = [
-        f"https://img.shields.io/badge/quotes-{rows_count}-111827?logo=files&logoColor=white",
-        f"https://img.shields.io/badge/size~{size_kb}%20KB-374151",
-        "https://img.shields.io/badge/format-CSV-0ea5e9",
-        f"https://img.shields.io/badge/updated-{gen_utc.replace(' ', '%20')}-10b981",
+        f"https://img.shields.io/badge/quotes-{ctx['rows_count']}-111827?logo=files&logoColor=white",
+        f"https://img.shields.io/badge/size~{ctx['size_kb']}%20KB-374151",
+        f"https://img.shields.io/badge/updated-{ctx['gen_utc'].split()[0]}-10b981",
     ]
-
-    lines: list[str] = []
-    lines += [
+   
+    md = [
         "<!-- AUTO-GENERATED: DO NOT EDIT MANUALLY -->",
         '<div align="center">',
         "",
         "# bonjourr-chinese-quotes",
         "",
-        "<p><b>中文语录数据集（CSV）</b> · 适用于 Bonjourr / 新标签页扩展 / 个人项目</p>",
-        "",
-        "<p>",
-        "  " + " ".join([f'<img alt="badge" src="{u}">' for u in badges]),
-        "</p>",
-        "",
-        "<p>",
-        f'  <a href="{raw}"><img alt="GitHub Raw" src="https://img.shields.io/badge/Download-GitHub%20Raw-2ea44f"></a>',
-        f'  <a href="{jsd}"><img alt="jsDelivr" src="https://img.shields.io/badge/Download-jsDelivr-2563eb"></a>',
-        f'  <a href="{ghp}"><img alt="ghproxy" src="https://img.shields.io/badge/Download-ghproxy-f97316"></a>',
-        "</p>",
-        "",
+        "<p><b>中文语录数据集（CSV）</b></p>",
+        "<p>" + " ".join([f'<img src="{b}">' for b in badges]) + "</p>",
+        f'<p><a href="{ctx["links"]["raw"]}">Download Raw CSV</a></p>',
         "</div>",
         "",
         "---",
+        "## 今日精选",
         "",
-        "## 快速入口",
+        f"> {sample['quote']}",
         "",
-        f"- **CSV 文件（浏览）**：`{blob}`",
-        f"- **CSV 文件（Raw）**：`{raw}`",
-        "",
-        "---",
-        "",
-        "## 下载（quotes.csv）",
-        "",
-        "<table>",
-        "  <thead><tr><th>渠道</th><th>链接</th><th>推荐场景</th></tr></thead>",
-        "  <tbody>",
-        f"    <tr><td><b>GitHub Raw</b></td><td><code>{raw}</code></td><td>默认首选：稳定、权威</td></tr>",
-        f"    <tr><td><b>jsDelivr</b></td><td><code>{jsd}</code></td><td>CDN：更快、可缓存</td></tr>",
-        f"    <tr><td><b>ghproxy</b></td><td><code>{ghp}</code></td><td>代理：网络受限时尝试</td></tr>",
-        "  </tbody>",
-        "</table>",
-        "",
-        "> 小提示：如果你在代码里引用链接，建议保留“主链接 + 备用链接”以提升可用性。",
+        f"- — *{sample['author']}*" if sample['author'] else "",
         "",
         "---",
-        "",
         "## 数据概览",
         "",
-        "<table>",
-        "  <tbody>",
-        f"    <tr><td>条目数</td><td><b>{rows_count}</b></td></tr>",
-        f"    <tr><td>文件大小</td><td><b>~{size_kb} KB</b></td></tr>",
-        f"    <tr><td>校验（SHA-256）</td><td><code>{csv_sha[:20]}…</code></td></tr>",
-        f"    <tr><td>最近生成</td><td><b>{gen_utc}</b> / <b>{gen_cn}</b></td></tr>",
-        "  </tbody>",
-        "</table>",
+        "| 指标 | 数值 | 备注 |",
+        "| :--- | :--- | :--- |",
+        f"| **条目数** | `{ctx['rows_count']}` | 较昨日 {'+' if ctx['diff_count'] >=0 else ''}{ctx['diff_count']} |",
+        f"| **文件大小** | `{ctx['size_kb']} KB` | - |",
+        f"| **SHA-256** | `{ctx['csv_sha'][:16]}...` | 前16位 |",
+        f"| **更新时间** | `{ctx['gen_cn']}` | 北京时间 |",
         "",
-    ]
-
-    if sample_quote.strip():
-        lines += [
-            "## 今日精选",
-            "",
-            f"> {safe_md_inline(sample_quote, 260)}",
-            "",
-        ]
-        if sample_author.strip():
-            lines += [f"- — {safe_md_inline(sample_author, 120)}", ""]
-
-    lines += [
         "---",
-        "",
-        "## 自动更新",
-        "",
-        "- README 由 GitHub Actions 定时生成；当内容无变化时不会提交（避免噪音提交）。",
-        "- 需要修改样式/统计：编辑 `scripts/generate_readme.py`。",
-        "",
+        "## 自动更新说明",
+        "- 本文件由 GitHub Actions 每日自动生成。",
+        ""
     ]
-    return "\n".join(lines) + "\n"
+    return "\n".join(md)
 
-def build_summary(
-    repo: str,
-    branch: str,
-    csv_rel: str,
-    links: dict[str, str],
-    rows_count: int,
-    size_kb: int,
-    csv_sha: str,
-    gen_utc: str,
-    gen_cn: str,
-    readme_changed: bool | None,
-    csv_preview: str,
-) -> str:
-    raw = links["raw"]
-    jsd = links["jsdelivr"]
-    ghp = links["ghproxy"]
-    blob = links["blob"]
-
-    if readme_changed is True:
-        status = "✅ README 有变化：将提交"
-    elif readme_changed is False:
-        status = "🟦 README 无变化：跳过提交（正常）"
+def generate_step_summary(ctx: dict, diagnositcs: list[str]):
+    """生成 GitHub Actions 漂亮的 Summary"""
+    summary_path = os.getenv("GITHUB_STEP_SUMMARY")
+    if not summary_path:
+        return
+    icon = "✅" if ctx['diff_count'] >= 0 else "⚠️"
+    md = [
+        f"## {icon} Generator Execution Report",
+        "",
+        "### 📊 Statistics Snapshot",
+        "",
+        "| Metric | Value | Change |",
+        "| :--- | :--- | :--- |",
+        f"| **Total Quotes** | **{ctx['rows_count']}** | {ctx['diff_count']:+d} |",
+        f"| **File Size** | {ctx['size_kb']} KB | - |",
+        f"| **Execution Time** | {ctx['exec_time']:.2f}s | - |",
+        "",
+        "### 🔍 Diagnostics",
+        ""
+    ]
+    if diagnositcs:
+        md.append("```text")
+        md.extend(diagnositcs)
+        md.append("```")
     else:
-        status = "ℹ️ 首次生成或无法比较：以 workflow 的 diff 为准"
-
-    return "\n".join(
-        [
-            "## ✅ README 自动生成报告",
-            "",
-            f"**状态**：{status}",
-            "",
-            "### 关键指标",
-            "",
-            f"- Repo：`{repo}`",
-            f"- Branch：`{branch}`",
-            f"- CSV：`{csv_rel}`",
-            f"- Rows：**{rows_count}**",
-            f"- Size：**~{size_kb} KB**",
-            f"- CSV SHA-256：`{csv_sha}`",
-            f"- Generated：**{gen_utc}** / **{gen_cn}**",
-            "",
-            "### 下载链接（可直接复制）",
-            "",
-            f"- 浏览：`{blob}`",
-            f"- GitHub Raw：`{raw}`",
-            f"- jsDelivr：`{jsd}`",
-            f"- ghproxy：`{ghp}`",
-            "",
-            "<details><summary>排错：CSV 预览（前 3 行）</summary>",
-            "",
-            "```text",
-            csv_preview.strip() or "(empty)",
-            "```",
-            "",
-            "</details>",
-            "",
-            "<details><summary>排错：常见原因</summary>",
-            "",
-            "- 一直“无变化”：说明生成结果稳定一致（正常）。你可以改 README 模板/统计项来制造可见变化。",
-            "- 找不到 CSV：检查 `QUOTES_CSV` 路径、大小写、是否在默认分支。",
-            "- 镜像链接不可用：可在脚本里增加/替换镜像域名。",
-            "",
-            "</details>",
-            "",
-        ]
-    )
-
-def main() -> int:
-    notice("SCRIPT_VERSION=2026-01-21-v6")
-    repo = os.getenv("GITHUB_REPOSITORY", "YOUR_GITHUB_NAME/bonjourr-chinese-quotes")
+        md.append("No warnings or errors detected. CSV structure looks good.")
+    Path(summary_path).write_text("\n".join(md), encoding="utf-8")
+def main():
+    start_time = time.time()
+    Logger.banner("STARTING README GENERATION JOB")
+    Logger.section("Checking Environment")
+    repo = os.getenv("GITHUB_REPOSITORY", "local/test")
     branch = os.getenv("DEFAULT_BRANCH", "main")
     csv_rel = os.getenv("QUOTES_CSV", "quotes.csv")
     csv_path = Path(csv_rel)
     readme_path = Path("README.md")
+    Logger.info(f"Repo: {repo} | Branch: {branch}")
+    old_row_count = 0
+    if readme_path.exists():
+        Logger.info("Reading existing README for history comparison...", "HISTORY")
+        old_content = read_text_smart(readme_path)
+        old_row_count = extract_old_stats(old_content)
+        Logger.info(f"Previous count: {old_row_count}")
+    Logger.section("Processing CSV Data")
+    try:
+        rows, load_stats = load_data(csv_path)
+    except Exception as e:
+        Logger.error(f"Failed to load CSV: {e}")
+        return 1
 
-    if not csv_path.exists():
-        error(f"CSV not found: {csv_rel}", file=csv_rel)
-        write_step_summary("\n".join(["## ❌ 生成失败", "", f"- 找不到 CSV：`{csv_rel}`", ""]))
-        return 2
-
-    rows_all = csv_rows(csv_path)
-    has_header, _ = detect_header(rows_all)
-    data_rows = rows_all[1:] if has_header and len(rows_all) >= 2 else rows_all
+    has_header = False
+    header = []
+    if len(rows) > 0:
+        first = [c.lower() for c in rows[0]]
+        if "quote" in first or "content" in first or "text" in first:
+            has_header = True
+            header = rows[0]
+            Logger.info(f"Detected Header: {header}", "CSV")
+    data_rows = rows[1:] if has_header else rows
     rows_count = len(data_rows)
-    size_kb = file_size_kb(csv_path)
-    csv_sha = sha256_file(csv_path)
-    now_utc = datetime.now(timezone.utc)
-    now_cn = now_utc.astimezone(timezone(timedelta(hours=8)))
-    gen_utc = now_utc.strftime("%Y-%m-%d %H:%M:%S UTC")
-    gen_cn = now_cn.strftime("%Y-%m-%d %H:%M:%S UTC+8")
-    links = build_links(repo, branch, csv_rel)
-    quote, author = pick_sample(rows_all, prefer_daily=True)
-    old = readme_path.read_text(encoding="utf-8") if readme_path.exists() else ""
-    new = build_readme(repo, branch, csv_rel, links, rows_count, size_kb, csv_sha, gen_utc, gen_cn, quote, author)
-    readme_path.write_text(new, encoding="utf-8")
-    readme_changed = (old != new) if old else None
-    csv_preview = "\n".join(read_text_smart(csv_path).splitlines()[:3])
-    write_step_summary(
-        build_summary(
-            repo=repo,
-            branch=branch,
-            csv_rel=csv_rel,
-            links=links,
-            rows_count=rows_count,
-            size_kb=size_kb,
-            csv_sha=csv_sha,
-            gen_utc=gen_utc,
-            gen_cn=gen_cn,
-            readme_changed=readme_changed,
-            csv_preview=csv_preview,
-        )
-    )
+    
+    if rows_count == 0:
+        Logger.error("CSV has no data rows!")
+        return 1
+    Logger.success(f"Parsed {rows_count} valid data rows.")
 
-    group("Inputs")
-    print("repo       =", repo)
-    print("branch     =", branch)
-    print("quotes_csv =", csv_rel)
-    endgroup()
-    group("Computed")
-    print("rows_count =", rows_count)
-    print("size_kb    =", size_kb)
-    print("csv_sha    =", csv_sha)
-    endgroup()
+    Logger.section("Picking Daily Sample")
+    seed_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    rnd = random.Random(seed_date)
+    sample_row = rnd.choice(data_rows)
 
-    notice(f"README generated: {readme_path.resolve()}")
+    q_idx, a_idx = 0, 1
+    if has_header:
+        for i, h in enumerate([x.lower() for x in header]):
+            if h in ["quote", "text", "content"]: q_idx = i
+            if h in ["author", "source", "from"]: a_idx = i
+    s_quote = sample_row[q_idx] if len(sample_row) > q_idx else "Unknown"
+    s_author = sample_row[a_idx] if len(sample_row) > a_idx else ""
+    
+    Logger.info(f"Selected: {s_quote[:30]}...", "DAILY")
+    ctx = {
+        "rows_count": rows_count,
+        "diff_count": rows_count - old_row_count,
+        "size_kb": int(csv_path.stat().st_size / 1024) + 1,
+        "csv_sha": sha256_file(csv_path),
+        "gen_utc": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        "gen_cn": datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S UTC+8"),
+        "links": {
+            "raw": f"https://raw.githubusercontent.com/{repo}/{branch}/{csv_rel}",
+        }
+    }
+    Logger.section("Writing Content")
+    new_readme = build_readme_content(ctx, {"quote": s_quote, "author": s_author})
+    readme_path.write_text(new_readme, encoding="utf-8")
+    Logger.success(f"README.md updated ({len(new_readme)} bytes written)")
+    ctx['exec_time'] = time.time() - start_time
+    generate_step_summary(ctx, [])
+    Logger.banner(f"JOB COMPLETED IN {ctx['exec_time']:.2f}s")
+    Logger.info(f"Final Count: {rows_count} (Change: {ctx['diff_count']:+d})", "RESULT")
+    
     return 0
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        sys.exit(main())
+    except Exception:
+        Logger.error("Unhandled Exception detected!")
+        traceback.print_exc()
+        sys.exit(1)
