@@ -15,48 +15,47 @@ MAX_WORKERS = 3
 REQUEST_TIMEOUT = 10
 API_SOURCES = [
     {
-        "name": "一言（官方）",
+        "name": "一言（官方-动画）",
         "url": "https://v1.hitokoto.cn/",
-        "params": {"c": ["i", "l", "k"], "encode": "json", "min_length": 5, "max_length": 30},
+        "params": {"c": "a", "encode": "json", "min_length": 5, "max_length": 30},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
     },
     {
-        "name": "一言（国际版）",
-        "url": "https://international.v1.hitokoto.cn/",
-        "params": {"c": ["i", "l", "k"], "encode": "json", "min_length": 5, "max_length": 30},
-        "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
-    },
-    {
-        "name": "一言（诗词分类）",
+        "name": "一言（官方-漫画）",
         "url": "https://v1.hitokoto.cn/",
-        "params": {"c": "i", "encode": "json"},
+        "params": {"c": "b", "encode": "json", "min_length": 5, "max_length": 30},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
     },
     {
-        "name": "一言（文学分类）",
+        "name": "一言（官方-文学）",
         "url": "https://v1.hitokoto.cn/",
-        "params": {"c": "d", "encode": "json"},
+        "params": {"c": "d", "encode": "json", "min_length": 5, "max_length": 30},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
     },
     {
-        "name": "韩小韩一言",
+        "name": "一言（官方-诗词）",
+        "url": "https://v1.hitokoto.cn/",
+        "params": {"c": "i", "encode": "json", "min_length": 5, "max_length": 30},
+        "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
+    },
+    {
+        "name": "一言（官方-哲学）",
+        "url": "https://v1.hitokoto.cn/",
+        "params": {"c": "k", "encode": "json", "min_length": 5, "max_length": 30},
+        "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
+    },
+    {
+        "name": "韩小韩（一言镜像）",
         "url": "https://api.vvhan.com/api/hitokoto",
         "params": {"type": "json"},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
     },
     {
-        "name": "夏柔随机文案",
+        "name": "夏柔（一言镜像）",
         "url": "https://api.xygeng.cn/one",
         "params": {},
         "parser": lambda data: {"text": data.get("data", {}).get("content", "").strip(), "author": data.get("data", {}).get("origin", "佚名").strip()}
-    },
-    {
-        "name": "励志名言",
-        "url": "https://api.oick.cn/dutang/api.php",
-        "params": {},
-        "parser": lambda data: {"text": json.loads(data) if isinstance(data, str) else data, "author": "佚名"} 
-        "parser": lambda data: {"text": data.get("text") or data, "author": "佚名"} 
-    },
+    }
 ]
 
 HEADERS = {
