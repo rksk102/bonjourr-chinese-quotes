@@ -1,42 +1,85 @@
-name: Update Quotes Daily (Fast)
+name: Update Quotes Daily (Premium)
 
 on:
   schedule:
     - cron: '0 0 * * *'
   workflow_dispatch:
+
 permissions:
   contents: write
 
 jobs:
   update_quotes:
-    name: ⚡ Fast Updater
+    name: 🚀 Quote Engine
     runs-on: ubuntu-latest
     
     steps:
-      - name: 🛠️ Checkout
+      - name: 📥 Checkout Code
         uses: actions/checkout@v4
         
-      - name: 🏃 Run Script
+      - name: 🖥️ System Info
+        run: |
+          echo "::group::⚙️ Environment Details"
+          echo "System: $(uname -a)"
+          echo "Python: $(python3 --version)"
+          echo "Date: $(date)"
+          echo "::endgroup::"
+          
+          echo -e "\033[36m"
+          echo "============================================"
+          echo "      ✨ DAILY QUOTES UPDATER v2.0 ✨       "
+          echo "============================================"
+          echo -e "\033[0m"
+
+      - name: 🐍 Run Extraction Script
         id: run_script
         run: python scripts/update.py
-        
-      - name: 👀 Check Changes
-        if: success()
-        run: |
-          git status
-          echo ""
-          echo "📊 数据统计:"
-          wc -l quotes.csv || true
+        env:
+          PYTHONIOENCODING: utf-8
 
-      - name: 📝 Commit & Push
+      - name: 📊 Verify Data Integrity
         if: success()
         run: |
+          echo "::group::🔍 Data Inspection"
+          if [ -f quotes.csv ]; then
+            echo "✅ quotes.csv exists."
+            LINE_COUNT=$(wc -l < quotes.csv)
+            echo "📄 Total Lines: $LINE_COUNT"
+            echo "👀 Head (First 3):"
+            head -n 3 quotes.csv
+          else
+            echo "❌ Fatal: quotes.csv is missing!"
+            exit 1
+          fi
+          echo "::endgroup::"
+
+      - name: 📡 Commit & Push
+        id: git_commit
+        if: success()
+        run: |
+          echo "::group::📝 Git Operations"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add quotes.csv
+          
           if git diff --staged --quiet; then
-            echo "✨ 没有变化，跳过提交。"
+            echo "🤔 No changes detected. Skipping commit."
+            echo "changed=false" >> $GITHUB_OUTPUT
           else
-            git commit -m "📅 [Fast Auto] Update quotes.csv $(date +'%Y-%m-%d %H:%M')"
+            git commit -m "📅 [Auto] Quotes Update $(date +'%Y-%m-%d') | +15/-15"
             git push
+            echo "🚀 Changes pushed to repository successfully."
+            echo "changed=true" >> $GITHUB_OUTPUT
           fi
+          echo "::endgroup::"
+
+      - name: 🚨 Error Handler
+        if: failure()
+        run: |
+          echo -e "\033[31m"
+          echo "============================================"
+          echo "         🚫 WORKFLOW FAILED 🚫              "
+          echo "============================================"
+          echo "Check the 'Run Extraction Script' step above"
+          echo "for detailed python tracebacks."
+          echo -e "\033[0m"
