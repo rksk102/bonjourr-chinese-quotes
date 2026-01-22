@@ -127,9 +127,14 @@ def fetch_one_quote(source_index=0):
                 text = parsed.get("text", "")
                 author = parsed.get("author", "佚名")
                 if text:
-                    return {'text': text, 'author': author}
+                    return {
+                        'text': text, 
+                        'author': author, 
+                        'source_name': source['name']
+                    }
         except Exception as e:
             pass
+    
     return None
 
 def fetch_new_quotes(count, existing_set):
