@@ -1,124 +1,98 @@
-name: Generate README daily
+name: "✨ Auto-Generate README"
 
 on:
   schedule:
     - cron: "30 0 * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      force_run:
+        description: 'Force run even if no changes?'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 concurrency:
-  group: generate-readme
-  cancel-in-progress: false
+  group: readme-updater
+  cancel-in-progress: true
 
 jobs:
-  build-readme:
+  generator:
+    name: 🚀 Generator Engine
     runs-on: ubuntu-latest
+    env:
+      term: xterm-256color
+      PYTHONUNBUFFERED: "1"
 
     steps:
-      - name: Checkout
+      - name: 📥 Checkout Code
         uses: actions/checkout@v4
         with:
-          persist-credentials: true
-          fetch-depth: 0
+          fetch-depth: 2
 
-      - name: Setup Python
+      - name: 🐍 Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: 'pip'
 
-      - name: Run generator
-        shell: bash
+      - name: 🔍 System Inspection
+        run: |
+          echo "::group::🛠️ Environment Info"
+          echo "Run ID: $GITHUB_RUN_ID"
+          echo "Actor: $GITHUB_ACTOR"
+          python --version
+          git --version
+          echo "::endgroup::"
+
+      - name: ⚡ Run Generator Script
+        id: run_script
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          QUOTES_CSV: "quotes.csv"
         run: |
-          set -euo pipefail
+          # 运行优化后的脚本
           python scripts/generate_readme.py
 
-      - name: Diff & diagnostics
-        shell: bash
+      - name: 📊 Diff & Verify
+        id: check_diff
         run: |
-          set -euo pipefail
-
-          echo "::group::git diff --stat"
-          git diff --stat -- README.md || true
+          echo "::group::📄 Git Status & Diff"
+          git status -s
+          if git diff --quiet README.md; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "✅ No changes detected in README.md"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "⚠️ Changes detected! Showing stats:"
+            git diff --stat README.md
+          fi
           echo "::endgroup::"
 
-          echo "::group::README head (first 80 lines)"
-          sed -n '1,80p' README.md || true
-          echo "::endgroup::"
-
-          # 把诊断写进 Summary（更好看）
-          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-            {
-              echo "## 诊断信息（Workflow）"
-              echo ""
-              echo "### Diff（README.md）"
-              echo ""
-              echo "\`\`\`"
-              git diff --stat -- README.md || true
-              echo "\`\`\`"
-              echo ""
-              echo "<details><summary>展开：README 头部预览（前 80 行）</summary>"
-              echo ""
-              echo "\`\`\`markdown"
-              sed -n '1,80p' README.md || true
-              echo "\`\`\`"
-              echo ""
-              echo "</details>"
-              echo ""
-              echo "<details><summary>展开：运行环境</summary>"
-              echo ""
-              echo "\`\`\`text"
-              python -V
-              git --version
-              echo "actor=${GITHUB_ACTOR}"
-              echo "ref=${GITHUB_REF}"
-              echo "sha=${GITHUB_SHA}"
-              echo "\`\`\`"
-              echo ""
-              echo "</details>"
-              echo ""
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Commit & push if changed
-        shell: bash
+      - name: 💾 Commit & Push
+        if: steps.check_diff.outputs.changed == 'true' || inputs.force_run
         run: |
-          set -euo pipefail
-
-          if git diff --quiet; then
-            echo "::notice::No changes. Skip commit."
-            exit 0
-          fi
-
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          echo "::group::🚀 Pushing changes"
           git add README.md
-          git commit -m "chore: auto-generate README [skip ci]"
+          DATE_STR=$(date "+%Y-%m-%d")
+          git commit -m "chore(doc): update stats & daily quote [$DATE_STR] [skip ci]"
           git push
+          echo "::endgroup::"
+          echo "✅ Successfully pushed updates to repository."
 
-      - name: Failure dump
+      - name: 🚨 Diagnostic Dump
         if: failure()
-        shell: bash
         run: |
-          set -euo pipefail
-          echo "::group::git status"
-          git status -sb || true
+          echo "::error::Workflow failed! Creating disaster dump..."
+          echo "::group::📂 File Tree (Depth 3)"
+          tree -L 3 . || find . -maxdepth 3
           echo "::endgroup::"
-
-          echo "::group::tree (depth=3)"
-          find . -maxdepth 3 -type f | sed 's|^\./||' | sort | sed -n '1,400p'
+          
+          echo "::group::📄 CSV Head Check"
+          head -n 5 quotes.csv || echo "CSV file is missing!"
           echo "::endgroup::"
-
-          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-            {
-              echo "## ❌ 失败信息（Failure dump）"
-              echo ""
-              echo "- 请展开日志中的 **git status** / **tree** 分组查看详细原因。"
-              echo ""
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
