@@ -86,50 +86,94 @@ def load_data(csv_path: Path) -> tuple[list[list[str]], dict]:
     
     return rows, stats
 
-def build_readme_content(
-    ctx: dict,
-    sample: dict
-) -> str:
-    badges = [
-        f"https://img.shields.io/badge/quotes-{ctx['rows_count']}-111827?logo=files&logoColor=white",
-        f"https://img.shields.io/badge/size~{ctx['size_kb']}%20KB-374151",
-        f"https://img.shields.io/badge/updated-{ctx['gen_utc'].split()[0]}-10b981",
-    ]
-   
+def build_readme_content(ctx: dict, sample: dict) -> str:
+    """
+    生成精美的 README 内容（混合 HTML/Markdown）
+    """
+    repo = ctx['repo']
+
+    badge_stars = make_badge("STARS", "★", "FABD2F", "github")
+    badge_quotes = make_badge("QUOTES", ctx['rows_count'], "4F46E5", "googledocs")
+    badge_size = make_badge("SIZE", f"{ctx['size_kb']} KB", "059669", "database")
+    badge_update = make_badge("UPDATED", "TODAY", "BE185D", "clock")
+    dl_raw = f"https://raw.githubusercontent.com/{repo}/{os.getenv('DEFAULT_BRANCH', 'main')}/quotes.csv"
+    btn_raw = f'<a href="{dl_raw}"><img src="{make_badge("DOWNLOAD", "RAW .CSV", "2ea44f", "github")}" alt="Download Raw"></a>'
+    diff_str = f"+{ctx['diff_count']}" if ctx['diff_count'] > 0 else (str(ctx['diff_count']) if ctx['diff_count'] < 0 else "-")
+
     md = [
         "<!-- AUTO-GENERATED: DO NOT EDIT MANUALLY -->",
         '<div align="center">',
         "",
-        "# bonjourr-chinese-quotes",
+        "# 📜 Bonjourr Chinese Quotes",
         "",
-        "<p><b>中文语录数据集（CSV）</b></p>",
-        "<p>" + " ".join([f'<img src="{b}">' for b in badges]) + "</p>",
-        f'<p><a href="{ctx["links"]["raw"]}">Download Raw CSV</a></p>',
+        "<h3>精选中文语录数据集 · 每日自动更新</h3>",
+        "",
+        f'<img src="{badge_quotes}" alt="Quotes Count">',
+        f'<img src="{badge_size}" alt="File Size">',
+        f'<img src="{badge_update}" alt="Last Update">',
+        "",
+        "<br/>",
+        "",
+        "<table>",
+        "<tr>",
+        '<td align="center" width="600">',
+        "",
+        "### ☕️ 今日一言 (Daily Quote)",
+        "",
+        f"<br/>",
+        f"<h2>❝ {sample['quote']} ❞</h2>",
+        f"<br/>",
+        f'<p align="right">—— <b>{sample["author"] or "佚名"}</b></p>',
+        "",
+        "</td>",
+        "</tr>",
+        "</table>",
+        "",
+        "<br/>",
+        "",
+        "## 📥 获取数据 / Downloads",
+        "",
+        "直接在你的项目中使用以下链接，始终获取最新数据：",
+        "",
+        btn_raw,
+        "",
+        "| 渠道 (Provider) | 链接 (URL) | 推荐场景 |",
+        "| :--- | :--- | :--- |",
+        f"| **GitHub Raw** | `{ctx['links']['raw']}` | ✅ **首选**，开发/生产通用 |",
+        f"| **jsDelivr** | `https://cdn.jsdelivr.net/gh/{repo}@main/quotes.csv` | 🚀 **CDN**，网站前端引用 |",
+        "",
+        "<br/>",
+        "",
+        "## 📊 实时统计 / Dashboard",
+        "",
+        "| 昨天 (Yesterday) | 变化 (Change) | 今天 (Today) | 总大小 (Size) |",
+        "| :---: | :---: | :---: | :---: |",
+        f"| {ctx['rows_count'] - ctx['diff_count']} | **{diff_str}** | **{ctx['rows_count']}** | **{ctx['size_kb']} KB** |",
+        "",
+        "> *数据最后更新于: " + ctx['gen_cn'] + "*",
+        "",
         "</div>",
         "",
         "---",
-        "## 今日精选",
         "",
-        f"> {sample['quote']}",
+        "### 🤖 自动化说明",
         "",
-        f"- — *{sample['author']}*" if sample['author'] else "",
+        "- 本项目由 [GitHub Actions](https://github.com/features/actions) 维护。",
+        "- 每天北京时间 **08:30** 自动抓取并更新。",
+        "- 欢迎提交 PR 分享你喜欢的句子。",
         "",
-        "---",
-        "## 数据概览",
-        "",
-        "| 指标 | 数值 | 备注 |",
-        "| :--- | :--- | :--- |",
-        f"| **条目数** | `{ctx['rows_count']}` | 较昨日 {'+' if ctx['diff_count'] >=0 else ''}{ctx['diff_count']} |",
-        f"| **文件大小** | `{ctx['size_kb']} KB` | - |",
-        f"| **SHA-256** | `{ctx['csv_sha'][:16]}...` | 前16位 |",
-        f"| **更新时间** | `{ctx['gen_cn']}` | 北京时间 |",
-        "",
-        "---",
-        "## 自动更新说明",
-        "- 本文件由 GitHub Actions 每日自动生成。",
-        ""
     ]
+    
     return "\n".join(md)
+
+def make_badge(label: str, message: str, color: str, icon: str = "") -> str:
+    """生成 Shields.io 'for-the-badge' 风格的精美徽章"""
+    label = label.replace(" ", "%20")
+    message = str(message).replace(" ", "%20")
+    url = f"https://img.shields.io/badge/{label}-{message}-{color}?style=for-the-badge&labelColor=24292e"
+    if icon:
+        url += f"&logo={icon}&logoColor=white"
+    return url
 
 def generate_step_summary(ctx: dict, diagnositcs: list[str]):
     """生成 GitHub Actions 漂亮的 Summary"""
@@ -158,6 +202,8 @@ def generate_step_summary(ctx: dict, diagnositcs: list[str]):
     else:
         md.append("No warnings or errors detected. CSV structure looks good.")
     Path(summary_path).write_text("\n".join(md), encoding="utf-8")
+
+
 def main():
     start_time = time.time()
     Logger.banner("STARTING README GENERATION JOB")
@@ -212,6 +258,7 @@ def main():
     
     Logger.info(f"Selected: {s_quote[:30]}...", "DAILY")
     ctx = {
+        "repo": repo,
         "rows_count": rows_count,
         "diff_count": rows_count - old_row_count,
         "size_kb": int(csv_path.stat().st_size / 1024) + 1,
