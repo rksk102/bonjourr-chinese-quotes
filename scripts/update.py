@@ -87,7 +87,7 @@ API_SOURCES = [
         "url": "https://api.xygeng.cn/one",
         "params": {},
         "parser": lambda data: {"text": data.get("text", "").strip(), "author": data.get("author", "佚名").strip()}
-    },
+    }，
     {
         "name": "句子迷API",
         "url": "https://api.juzimi.com/api/random",
@@ -112,7 +112,7 @@ API_SOURCES = [
         "url": "https://api.oick.cn/mingyan/api.php",
         "params": {},
         "parser": lambda data: {"text": data.get("text", "").strip(), "author": data.get("author", "佚名").strip()}
-    }，
+    },
     {
         "name": "心灵鸡汤",
         "url": "https://api.oick.cn/yulu/api.php",
