@@ -112,7 +112,7 @@ API_SOURCES = [
         "url": "https://api.oick.cn/mingyan/api.php",
         "params": {},
         "parser": lambda data: {"text": data.get("text", "").strip(), "author": data.get("author", "佚名").strip()}
-    },
+    }，
     {
         "name": "心灵鸡汤",
         "url": "https://api.oick.cn/yulu/api.php",
@@ -236,7 +236,7 @@ def fetch_new_quotes(count, existing_set):
                             new_quotes.append(result)
                             round_success += 1
                             sys.stdout.write(f"\r   进度: {len(new_quotes)}/{count}")
-                            sys.stdout。flush()
+                            sys.stdout.flush()
             if round_success == 0:
                 consecutive_failures += 1
                 log(f"⚠️ 第 {consecutive_failures} 次尝试未获取到新数据", 'warning')
