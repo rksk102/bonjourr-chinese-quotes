@@ -181,12 +181,12 @@ def fetch_new_quotes(count, existing_set):
 
 def rewrite_csv(all_quotes):
     """
-    覆盖写入 CSV 文件
+    覆盖写入 CSV 文件（无 Header 模式）
     """
     print("::group::💾 重写 CSV 文件")
     try:
         with open(OUTPUT_FILE, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=['author', 'text'])
+            writer = csv.DictWriter(f, fieldnames=['author', 'text'], extrasaction='ignore')
             writer.writerows(all_quotes)
         print(f"✅ 文件已更新（无Header），当前总条数: {len(all_quotes)}")
         print("::endgroup::")
@@ -205,12 +205,13 @@ def generate_summary(new_quotes, total_count):
         f.write(f"**🆕 今日新增**: `{len(new_quotes)}` 条 \n\n")
         f.write(f"**📚 总计**: `{total_count}` 条 \n\n")
         f.write("### 🎲 今日新增预览\n")
-        f.write("| 内容 | 出处 |\n")
-        f.write("| :--- | :--- |\n")
-        for q in new_quotes[:min(5, len(new_quotes))]:
+        f.write("| 内容 | 作者/出处 | 来源渠道 |\n")
+        f.write("| :--- | :--- | :--- |\n")
+        for q in new_quotes[:min(15, len(new_quotes))]:
             safe_text = q['text'].replace('|', '\\|')
             safe_author = q['author'].replace('|', '\\|')
-            f.write(f"| {safe_text} | {safe_author} |\n")
+            safe_source = q.get('source_name', '未知来源')
+            f.write(f"| {safe_text} | {safe_author} | {safe_source} |\n")
 
 if __name__ == "__main__":
     start_time = time.time()
