@@ -83,7 +83,6 @@ def load_data(csv_path: Path) -> tuple[list[list[str]], dict]:
         clean_row = [cell.strip() for cell in row]
         if any(clean_row):
             rows.append(clean_row)
-    
     return rows, stats
 
 def build_readme_content(ctx: dict, sample: dict) -> str:
@@ -99,12 +98,14 @@ def build_readme_content(ctx: dict, sample: dict) -> str:
 
     checksum_short = ctx['csv_sha'][:12] + "..."
     link_raw = ctx['links']['raw']
-    link_cdn = f"https://cdn.jsdelivr.net/gh/{repo}@{branch}/quotes.csv"
+    link_jsd = f"https://cdn.jsdelivr.net/gh/{repo}@{branch}/quotes.csv"
+    link_ghp = f"https://mirror.ghproxy.com/{link_raw}"
     b_quotes = make_badge("QUOTES", ctx['rows_count'], "4F46E5", "googledocs") 
     b_size   = make_badge("SIZE", f"{ctx['size_kb']} KB", "059669", "database")
     b_time   = make_badge("UPDATE", "TODAY", "BE185D", "clock")
     btn_raw_img = f"https://img.shields.io/badge/GitHub_Raw-Source_File-2ea44f?style=for-the-badge&logo=github&logoColor=white"
-    btn_cdn_img = f"https://img.shields.io/badge/jsDelivr-CDN_Accelerated-ff5627?style=for-the-badge&logo=jsdelivr&logoColor=white"
+    btn_jsd_img = f"https://img.shields.io/badge/jsDelivr-Global_CDN-ff5627?style=for-the-badge&logo=jsdelivr&logoColor=white"
+    btn_ghp_img = f"https://img.shields.io/badge/ghproxy-Mirror_Proxy-f97316?style=for-the-badge&logo=googlecloud&logoColor=white"
 
     md = [
         "<!-- AUTO-GENERATED -->",
@@ -136,22 +137,27 @@ def build_readme_content(ctx: dict, sample: dict) -> str:
 
         "## ⚡️ 快速接入 / Quick Access",
         "",
-        "### 🟢 虽然简单，但是稳定 (Official Source)",
-        "> 适用于：**Python 爬虫**、**数据备份**、**后端同步**、**Git Submodule**",
+        "### 🟢 官方源 (Stable)",
+        "> 最稳定的原始数据，适合后端同步或数据备份。",
         "",
         f"[![Raw]({btn_raw_img})]({link_raw})",
-        "",
         "```url",
         link_raw,
         "```",
         "",
-        "### 🟠 速度更快，适合网页 (CDN Accelerated)",
-        "> 适用于：**Bonjourr 扩展**、**Web 前端应用**、**静态网页**",
+        "### 🟠 生产环境加速 (CDNs)",
+        "> 推荐用于网页前端、Bonjourr 扩展等直接引用的场景。",
         "",
-        f"[![CDN]({btn_cdn_img})]({link_cdn})",
-        "",
+        "**1. jsDelivr (Global)** - 全球节点多，速度快（推荐）",
+        f"[![jsd]({btn_jsd_img})]({link_jsd})",
         "```url",
-        link_cdn,
+        link_jsd,
+        "```",
+        "",
+        "**2. ghproxy (Mirror)** - 针对特定网络环境优化的镜像",
+        f"[![ghp]({btn_ghp_img})]({link_ghp})",
+        "```url",
+        link_ghp,
         "```",
         "",
 
@@ -161,14 +167,16 @@ def build_readme_content(ctx: dict, sample: dict) -> str:
         "```python",
         "import pandas as pd",
         "",
-        "# 直接读取 GitHub Raw 地址",
-        f'url = "{link_raw}"',
+        "# 建议优先使用 jsDelivr 加速读取",
+        f'url = "{link_jsd}"',
         "try:",
         "    df = pd.read_csv(url)",
         "    print(f'成功加载 {len(df)} 条语录！')",
         "    print(df.sample(1))",
         "except Exception as e:",
-        "    print('加载失败:', e)",
+        "    print('CDN 加载失败，正在尝试切换到 Raw 源...')",
+        f'    df = pd.read_csv("{link_raw}")',
+        "    print('Raw 源加载成功！')",
         "```",
         "</details>",
         "",
