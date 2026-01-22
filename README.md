@@ -25,22 +25,27 @@
 
 ## ⚡️ 快速接入 / Quick Access
 
-### 🟢 虽然简单，但是稳定 (Official Source)
-> 适用于：**Python 爬虫**、**数据备份**、**后端同步**、**Git Submodule**
+### 🟢 官方源 (Stable)
+> 最稳定的原始数据，适合后端同步或数据备份。
 
 [![Raw](https://img.shields.io/badge/GitHub_Raw-Source_File-2ea44f?style=for-the-badge&logo=github&logoColor=white)](https://raw.githubusercontent.com/rksk102/bonjourr-chinese-quotes/main/quotes.csv)
-
 ```url
 https://raw.githubusercontent.com/rksk102/bonjourr-chinese-quotes/main/quotes.csv
 ```
 
-### 🟠 速度更快，适合网页 (CDN Accelerated)
-> 适用于：**Bonjourr 扩展**、**Web 前端应用**、**静态网页**
+### 🟠 生产环境加速 (CDNs)
+> 推荐用于网页前端、Bonjourr 扩展等直接引用的场景。
 
-[![CDN](https://img.shields.io/badge/jsDelivr-CDN_Accelerated-ff5627?style=for-the-badge&logo=jsdelivr&logoColor=white)](https://cdn.jsdelivr.net/gh/rksk102/bonjourr-chinese-quotes@main/quotes.csv)
-
+**1. jsDelivr (Global)** - 全球节点多，速度快（推荐）
+[![jsd](https://img.shields.io/badge/jsDelivr-Global_CDN-ff5627?style=for-the-badge&logo=jsdelivr&logoColor=white)](https://cdn.jsdelivr.net/gh/rksk102/bonjourr-chinese-quotes@main/quotes.csv)
 ```url
 https://cdn.jsdelivr.net/gh/rksk102/bonjourr-chinese-quotes@main/quotes.csv
+```
+
+**2. ghproxy (Mirror)** - 针对特定网络环境优化的镜像
+[![ghp](https://img.shields.io/badge/ghproxy-Mirror_Proxy-f97316?style=for-the-badge&logo=googlecloud&logoColor=white)](https://mirror.ghproxy.com/https://raw.githubusercontent.com/rksk102/bonjourr-chinese-quotes/main/quotes.csv)
+```url
+https://mirror.ghproxy.com/https://raw.githubusercontent.com/rksk102/bonjourr-chinese-quotes/main/quotes.csv
 ```
 
 <details>
@@ -49,14 +54,16 @@ https://cdn.jsdelivr.net/gh/rksk102/bonjourr-chinese-quotes@main/quotes.csv
 ```python
 import pandas as pd
 
-# 直接读取 GitHub Raw 地址
-url = "https://raw.githubusercontent.com/rksk102/bonjourr-chinese-quotes/main/quotes.csv"
+# 建议优先使用 jsDelivr 加速读取
+url = "https://cdn.jsdelivr.net/gh/rksk102/bonjourr-chinese-quotes@main/quotes.csv"
 try:
     df = pd.read_csv(url)
     print(f'成功加载 {len(df)} 条语录！')
     print(df.sample(1))
 except Exception as e:
-    print('加载失败:', e)
+    print('CDN 加载失败，正在尝试切换到 Raw 源...')
+    df = pd.read_csv("https://raw.githubusercontent.com/rksk102/bonjourr-chinese-quotes/main/quotes.csv")
+    print('Raw 源加载成功！')
 ```
 </details>
 
@@ -64,7 +71,7 @@ except Exception as e:
 
 ## 📊 数据看板 / Dashboard
 
-> **更新日志**: 2026-01-22 21:21:34 UTC+8 (UTC+8)
+> **更新日志**: 2026-01-22 21:32:23 UTC+8 (UTC+8)
 
 | 指标 | 当前数值 | 较昨日变化 |
 | :--- | :--- | :--- |
