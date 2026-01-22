@@ -87,10 +87,10 @@ class Log:
     @staticmethod
     def group_start(title):
         print(f"::group::{title}")
-
     @staticmethod
     def group_end():
         print("::endgroup::")
+
 class Stats:
     def __init__(self):
         self.api_calls = {source['name']: {'success': 0, 'fail': 0} for source in API_SOURCES}
@@ -101,6 +101,7 @@ class Stats:
         if name in self.api_calls:
             self.api_calls[name]['fail'] += 1
 stats_tracker = Stats()
+
 def load_existing_quotes():
     """读取 CSV 返回集合和列表"""
     Log.group_start("📖 正在读取历史数据")
