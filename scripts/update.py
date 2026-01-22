@@ -135,7 +135,7 @@ HEADERS = {
 }
 
 def log(message, type='info'):
-    timestamp = datetime.当前().strftime("%H:%M:%S")
+    timestamp = datetime.now().strftime("%H:%M:%S")
     if type == 'error':
         print(f"::error::{message}")
     elif type == 'warning':
