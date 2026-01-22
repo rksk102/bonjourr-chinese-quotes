@@ -266,7 +266,6 @@ def main():
     csv_rel = os.getenv("QUOTES_CSV", "quotes.csv")
     csv_path = Path(csv_rel)
     readme_path = Path("README.md")
-    
     Logger.info(f"Repo: {repo} | Branch: {branch}")
 
     old_row_count = 0
@@ -276,17 +275,18 @@ def main():
             old_content = read_text_smart(readme_path)
             old_row_count = extract_old_stats(old_content)
         except:
-            pass
-
+            pass 
+            
     Logger.section("Processing CSV Data")
     try:
         rows, load_stats = load_data(csv_path)
     except Exception as e:
         Logger.error(f"Failed to load CSV: {e}")
         return 1
+
     has_header = False
     header = []
-    q_idx, a_idx = 0, 1
+    q_idx, a_idx = 1, 0 
     
     if len(rows) > 0:
         first_row = [c.lower().strip() for c in rows[0]]
@@ -303,15 +303,15 @@ def main():
                     q_idx = i
                 elif h in valid_author_keys: 
                     a_idx = i
-            
-            Logger.info(f"Mapped Columns -> Quote: Col {q_idx}, Author: Col {a_idx}")
+        else:
+            Logger.info("No header detected, strictly using: Col 0=Author, Col 1=Quote", "CSV")
+
     data_rows = rows[1:] if has_header else rows
     rows_count = len(data_rows)
     
     if rows_count == 0:
         Logger.error("CSV has no data rows!")
         return 1
-
     Logger.success(f"Parsed {rows_count} valid data rows.")
     Logger.section("Picking Daily Sample")
     seed_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -323,7 +323,6 @@ def main():
         sample_row = rnd.choice(data_rows)
         s_quote = sample_row[q_idx] if len(sample_row) > q_idx else "Unknown"
         s_author = sample_row[a_idx] if len(sample_row) > a_idx else "佚名"
-
     Logger.info(f"Selected: {s_quote[:20]}... -- {s_author}", "DAILY")
 
     ctx = {
@@ -338,6 +337,7 @@ def main():
             "raw": f"https://raw.githubusercontent.com/{repo}/{branch}/{csv_rel}",
         }
     }
+
     Logger.section("Writing Content")
     new_readme = build_readme_content(ctx, {"quote": s_quote, "author": s_author})
     readme_path.write_text(new_readme, encoding="utf-8")
@@ -346,6 +346,7 @@ def main():
     ctx['exec_time'] = time.time() - start_time
     generate_step_summary(ctx, []) 
     Logger.banner(f"JOB COMPLETED IN {ctx['exec_time']:.2f}s")
+    
     return 0
 
 if __name__ == "__main__":
