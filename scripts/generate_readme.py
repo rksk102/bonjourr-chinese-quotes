@@ -99,13 +99,16 @@ def build_readme_content(ctx: dict, sample: dict) -> str:
     checksum_short = ctx['csv_sha'][:12] + "..."
     link_raw = ctx['links']['raw']
     link_jsd = f"https://cdn.jsdelivr.net/gh/{repo}@{branch}/quotes.csv"
+    link_stat = f"https://cdn.statically.io/gh/{repo}/{branch}/quotes.csv"
     link_ghp = f"https://mirror.ghproxy.com/{link_raw}"
     b_quotes = make_badge("QUOTES", ctx['rows_count'], "4F46E5", "googledocs") 
     b_size   = make_badge("SIZE", f"{ctx['size_kb']} KB", "059669", "database")
     b_time   = make_badge("UPDATE", "TODAY", "BE185D", "clock")
     btn_raw_img = f"https://img.shields.io/badge/GitHub_Raw-Source_File-2ea44f?style=for-the-badge&logo=github&logoColor=white"
     btn_jsd_img = f"https://img.shields.io/badge/jsDelivr-Global_CDN-ff5627?style=for-the-badge&logo=jsdelivr&logoColor=white"
+    btn_stat_img = f"https://img.shields.io/badge/Statically-Multi_CDN-7c3aed?style=for-the-badge&logo=serverless&logoColor=white"
     btn_ghp_img = f"https://img.shields.io/badge/ghproxy-Mirror_Proxy-f97316?style=for-the-badge&logo=googlecloud&logoColor=white"
+
 
     md = [
         "<!-- AUTO-GENERATED -->",
@@ -138,23 +141,30 @@ def build_readme_content(ctx: dict, sample: dict) -> str:
         "## ⚡️ 快速接入 / Quick Access",
         "",
         "### 🟢 官方源 (Stable)",
-        "> 最稳定的原始数据，适合后端同步或数据备份。",
-        "",
         f"[![Raw]({btn_raw_img})]({link_raw})",
         "```url",
         link_raw,
         "```",
         "",
-        "### 🟠 生产环境加速 (CDNs)",
-        "> 推荐用于网页前端、Bonjourr 扩展等直接引用的场景。",
+        "### 🚀 全球加速 (Global CDNs)",
+        "> 推荐生产环境使用。如果其中一个访问慢，可切换另一个。",
         "",
-        "**1. jsDelivr (Global)** - 全球节点多，速度快（推荐）",
+        "**1. jsDelivr** (推荐：快速、缓存强)",
         f"[![jsd]({btn_jsd_img})]({link_jsd})",
         "```url",
         link_jsd,
         "```",
         "",
-        "**2. ghproxy (Mirror)** - 针对特定网络环境优化的镜像",
+        "**2. Statically** (备选：基于 Cloudflare/Fastly 多云分发)",
+        f"[![stat]({btn_stat_img})]({link_stat})",
+        "```url",
+        link_stat,
+        "```",
+        "",
+        "### 🌏 区域镜像 (Mirrors)",
+        "> 针对特定受限网络环境优化",
+        "",
+        "**ghproxy**",
         f"[![ghp]({btn_ghp_img})]({link_ghp})",
         "```url",
         link_ghp,
@@ -167,16 +177,27 @@ def build_readme_content(ctx: dict, sample: dict) -> str:
         "```python",
         "import pandas as pd",
         "",
-        "# 建议优先使用 jsDelivr 加速读取",
-        f'url = "{link_jsd}"',
-        "try:",
-        "    df = pd.read_csv(url)",
-        "    print(f'成功加载 {len(df)} 条语录！')",
+        "# 定义加速源列表",
+        f'urls = [',
+        f'    "{link_jsd}",      # 首选',
+        f'    "{link_stat}",     # 备选',
+        f'    "{link_raw}"       # 兜底',
+        "]",
+        "",
+        "df = None",
+        "for url in urls:",
+        "    try:",
+        "        print(f'正在尝试: {url} ...')",
+        "        df = pd.read_csv(url)",
+        "        print('✅ 加载成功！')",
+        "        break",
+        "    except Exception:",
+        "        continue",
+        "",
+        "if df is not None:",
         "    print(df.sample(1))",
-        "except Exception as e:",
-        "    print('CDN 加载失败，正在尝试切换到 Raw 源...')",
-        f'    df = pd.read_csv("{link_raw}")',
-        "    print('Raw 源加载成功！')",
+        "else:",
+        "    print('❌ 所有源均无法连接')",
         "```",
         "</details>",
         "",
