@@ -149,27 +149,25 @@ def log(message, type='info'):
 
 def load_existing_quotes():
     """
-    读取现有的 CSV 文件，返回：
-    1. existing_set: 用于去重的集合
-    2. existing_rows: 包含所有完整数据的列表（用于保留和回写）
+    读取现有的 CSV 文件
     """
     existing_set = set()
     existing_rows = []
-    
     if not os.path.exists(OUTPUT_FILE):
         log(f"📁 文件 {OUTPUT_FILE} 不存在，将创建新文件", 'info')
         return existing_set, existing_rows
-    
     try:
         with open(OUTPUT_FILE, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
+            reader = csv.DictReader(f, fieldnames=['author', 'text'])
             for row in reader:
                 text = row.get('text', '').strip()
                 author = row.get('author', '').strip()
+                if text == 'text' and author == 'author':
+                    continue
                 if text:
                     unique_key = f"{text}-{author}"
                     existing_set.add(unique_key)
-                    existing_rows.append({'author': author, 'text': text})
+                    existing_rows.append({'author': author, 'text': text})   
         log(f"📚 已加载 {len(existing_rows)} 条历史语录", 'info')
     except Exception as e:
         log(f"⚠️ 读取现有文件失败: {e}，将创建新文件", 'warning')
@@ -212,7 +210,7 @@ def fetch_one_quote(source_index=0):
 
 def fetch_new_quotes(count, existing_set):
     """
-    获取新的语录（不重复的）
+    获取新的语录
     """
     new_quotes = []
     consecutive_failures = 0
@@ -238,7 +236,7 @@ def fetch_new_quotes(count, existing_set):
                             new_quotes.append(result)
                             round_success += 1
                             sys.stdout.write(f"\r   进度: {len(new_quotes)}/{count}")
-                            sys.stdout.flush()
+                            sys.stdout。flush()
             if round_success == 0:
                 consecutive_failures += 1
                 log(f"⚠️ 第 {consecutive_failures} 次尝试未获取到新数据", 'warning')
@@ -254,15 +252,14 @@ def fetch_new_quotes(count, existing_set):
 
 def rewrite_csv(all_quotes):
     """
-    覆盖写入 CSV 文件（包含旧数据的剩余部分 + 新数据）
+    覆盖写入 CSV 文件
     """
     print("::group::💾 重写 CSV 文件")
     try:
         with open(OUTPUT_FILE, 'w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=['author', 'text'])
-            writer.writeheader()
             writer.writerows(all_quotes)
-        print(f"✅ 文件已更新，当前总条数: {len(all_quotes)}")
+        print(f"✅ 文件已更新（无Header），当前总条数: {len(all_quotes)}")
         print("::endgroup::")
         return True
     except Exception as e:
