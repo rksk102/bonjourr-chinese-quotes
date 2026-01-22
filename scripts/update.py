@@ -10,9 +10,10 @@ import concurrent.futures
 from datetime import datetime
 
 TARGET_COUNT = 15
+PRUNE_COUNT = 15
 OUTPUT_FILE = "quotes.csv"
-MAX_WORKERS = 3
-REQUEST_TIMEOUT = 10
+MAX_WORKERS = 4
+REQUEST_TIMEOUT = 8
 API_SOURCES = [
     {
         "name": "一言（官方-动画）",
@@ -62,23 +63,52 @@ HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 }
 
-def log(message, type='info'):
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    if type == 'error':
-        print(f"::error::{message}")
-    elif type == 'warning':
-        print(f"::warning::{message}")
-    else:
-        print(f"[{timestamp}] {message}")
+class Log:
+    RESET = '\033[0m'
+    BLUE = '\033[94m'
+    CYAN = '\033[96m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    BOLD = '\033[1m'
+    @staticmethod
+    def info(msg):
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        print(f"{Log.BLUE}[{timestamp}] ℹ️  {msg}{Log.RESET}")
+    @staticmethod
+    def success(msg):
+        print(f"{Log.GREEN}✅ {msg}{Log.RESET}")
+    @staticmethod
+    def warning(msg):
+        print(f"{Log.YELLOW}⚠️  {msg}{Log.RESET}")
+    @staticmethod
+    def error(msg):
+        print(f"{Log.RED}❌ {msg}{Log.RESET}")
+    @staticmethod
+    def group_start(title):
+        print(f"::group::{title}")
 
+    @staticmethod
+    def group_end():
+        print("::endgroup::")
+class Stats:
+    def __init__(self):
+        self.api_calls = {source['name']: {'success': 0, 'fail': 0} for source in API_SOURCES}
+    def record_success(self, name):
+        if name in self.api_calls:
+            self.api_calls[name]['success'] += 1
+    def record_fail(self, name):
+        if name in self.api_calls:
+            self.api_calls[name]['fail'] += 1
+stats_tracker = Stats()
 def load_existing_quotes():
-    """
-    读取现有的 CSV 文件
-    """
+    """读取 CSV 返回集合和列表"""
+    Log.group_start("📖 正在读取历史数据")
     existing_set = set()
     existing_rows = []
     if not os.path.exists(OUTPUT_FILE):
-        log(f"📁 文件 {OUTPUT_FILE} 不存在，将创建新文件", 'info')
+        Log.warning(f"文件 {OUTPUT_FILE} 不存在，将初始化新文件")
+        Log.group_end()
         return existing_set, existing_rows
     try:
         with open(OUTPUT_FILE, 'r', encoding='utf-8') as f:
@@ -91,30 +121,31 @@ def load_existing_quotes():
                 if text:
                     unique_key = f"{text}-{author}"
                     existing_set.add(unique_key)
-                    existing_rows.append({'author': author, 'text': text})   
-        log(f"📚 已加载 {len(existing_rows)} 条历史语录", 'info')
+                    existing_rows.append({'author': author, 'text': text})
+        Log.info(f"读取成功 | 当前总数: {len(existing_rows)}")
     except Exception as e:
-        log(f"⚠️ 读取现有文件失败: {e}，将创建新文件", 'warning')
+        Log.error(f"读取文件时发生错误: {e}")
+    Log.group_end()
     return existing_set, existing_rows
 
 def prune_old_quotes(existing_rows, count_to_remove):
-    """
-    随机删除指定数量的旧语录
-    """
+    """随机删除旧数据"""
     current_count = len(existing_rows)
+    Log.group_start(f"✂️ 数据修剪 (目标删除: {count_to_remove})")
     if current_count <= count_to_remove:
-        log(f"⚠️ 当前语录只有 {current_count} 条，少于或等于要删除的 {count_to_remove} 条，不清空，保留全部。", 'warning')
+        Log.warning(f"当前条数 ({current_count}) 不足，跳过删除操作")
+        Log.group_end()
         return existing_rows
-    log(f"✂️ 正在随机删除 {count_to_remove} 条旧语录...", 'info')
+    Log.info(f"正在从 {current_count} 条数据中随机移除 {count_to_remove} 条...")
     random.shuffle(existing_rows)
     kept_rows = existing_rows[:current_count - count_to_remove]
-    log(f"📉 删除完毕，剩余 {len(kept_rows)} 条历史语录", 'info')
+    Log.success(f"修剪完成 | 剩余: {len(kept_rows)}")
+    Log.group_end()
     return kept_rows
 
 def fetch_one_quote(source_index=0):
-    """
-    从指定索引的 API 源获取一条语录，失败则尝试下一个源
-    """
+    """单条抓取逻辑（带详细错误记录）"""
+    start_time = time.time()
     for i in range(source_index, len(API_SOURCES)):
         source = API_SOURCES[i]
         try:
@@ -127,110 +158,131 @@ def fetch_one_quote(source_index=0):
                 text = parsed.get("text", "")
                 author = parsed.get("author", "佚名")
                 if text:
+                    stats_tracker.record_success(source['name'])
                     return {
                         'text': text, 
                         'author': author, 
                         'source_name': source['name']
                     }
         except Exception as e:
+            stats_tracker.record_fail(source['name'])
             pass
-    
     return None
 
-def fetch_new_quotes(count, existing_set):
-    """
-    获取新的语录
-    """
+def draw_progress_bar(current, total, bar_length=30):
+    percent = float(current) * 100 / total
+    arrow = '▓' * int(percent / 100 * bar_length)
+    spaces = '░' * (bar_length - len(arrow))
+    sys.stdout.write(f"\r{Log.CYAN}🚀 正在抓取: [{arrow}{spaces}] {int(percent)}% ({current}/{total}){Log.RESET}")
+    sys.stdout.flush()
+
+def fetch_new_quotes(target, existing_set):
+    """并发抓取主循环"""
     new_quotes = []
     consecutive_failures = 0
-    MAX_FAILURES = 20
-    log(f"🚀 开始获取 {count} 条新语录...", 'info')
-    start_time = time.time()
-    
+    MAX_CONSECUTIVE_FAILURES = 50
+    print("\n")
+    Log.info(f"开始网络作业 | 目标新增: {target} 条")
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        while len(new_quotes) < count:
-            needed = count - len(new_quotes)
-            batch_size = min(needed, MAX_WORKERS * 2)
-            source_index = random.randint(0, len(API_SOURCES) - 1)
-            futures = [executor.submit(fetch_one_quote, source_index) for _ in range(batch_size)]
-            round_success = 0
+        while len(new_quotes) < target:
+            needed = target - len(new_quotes)
+            batch_size = min(needed + 2, MAX_WORKERS * 2) 
+            futures = []
+            for _ in range(batch_size):
+                src_idx = random.randint(0, len(API_SOURCES) - 1)
+                futures.append(executor.submit(fetch_one_quote, src_idx))
+            round_has_success = False
             for future in concurrent.futures.as_completed(futures):
                 result = future.result()
                 if result:
-                    unique_key = f"{result['text']}-{result['author']}"
-                    if unique_key not in existing_set:
-                        new_keys = {f"{q['text']}-{q['author']}" for q in new_quotes}
-                        if unique_key not in new_keys:
-                            existing_set.add(unique_key)
+                    u_key = f"{result['text']}-{result['author']}"
+                    if u_key not in existing_set:
+                        current_new_keys = {f"{q['text']}-{q['author']}" for q in new_quotes}
+                        if u_key not in current_new_keys:
                             new_quotes.append(result)
-                            round_success += 1
-                            sys.stdout.write(f"\r   进度: {len(new_quotes)}/{count}")
-                            sys.stdout.flush()
-            if round_success == 0:
+                            existing_set.add(u_key)
+                            round_has_success = True
+                            if len(new_quotes) <= target:
+                                draw_progress_bar(len(new_quotes), target)
+            if not round_has_success:
                 consecutive_failures += 1
-                log(f"⚠️ 第 {consecutive_failures} 次尝试未获取到新数据", 'warning')
             else:
                 consecutive_failures = 0
-            if consecutive_failures >= MAX_FAILURES:
-                log(f"❌ 连续 {MAX_FAILURES} 次失败，终止获取", 'error')
+            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                print()
+                Log.error(f"连续 {MAX_CONSECUTIVE_FAILURES} 次抓取失败，提前终止。")
                 break
-    elapsed = time.time() - start_time
     print()
-    log(f"✅ 获取完成！新增 {len(new_quotes)} 条，耗时: {elapsed:.2f} 秒", 'info')
+    Log.success(f"抓取作业完成 | 实际获取: {len(new_quotes)} 条")
     return new_quotes
 
 def rewrite_csv(all_quotes):
-    """
-    覆盖写入 CSV 文件（无 Header 模式）
-    """
-    print("::group::💾 重写 CSV 文件")
+    """重写文件"""
+    Log.group_start("💾 数据回写")
     try:
         with open(OUTPUT_FILE, 'w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=['author', 'text'], extrasaction='ignore')
             writer.writerows(all_quotes)
-        print(f"✅ 文件已更新（无Header），当前总条数: {len(all_quotes)}")
-        print("::endgroup::")
+        Log.success(f"文件覆写成功 ({len(all_quotes)} 条记录)")
+        Log.group_end()
         return True
     except Exception as e:
-        log(f"保存失败: {e}", 'error')
+        Log.error(f"文件写入失败: {e}")
+        Log.group_end()
         return False
 
-def generate_summary(new_quotes, total_count):
+def generate_report(new_quotes, total_count):
+    """生成漂亮的 GitHub Summary"""
     summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
     if not summary_path:
         return
     with open(summary_path, 'w', encoding='utf-8') as f:
-        f.write("# 📅 每日语录更新报告\n\n")
-        f.write(f"**⏰ 更新时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} \n\n")
-        f.write(f"**🆕 今日新增**: `{len(new_quotes)}` 条 \n\n")
-        f.write(f"**📚 总计**: `{total_count}` 条 \n\n")
-        f.write("### 🎲 今日新增预览\n")
+        f.write("# ✨ 每日语录自动更新报告\n")
+        f.write(f"> **⏰ 运行时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (UTC)\n\n")
+        f.write("### 📊 核心指标\n")
+        f.write("| 🆕 今日新增 | 📉 今日移除 | 📚 当前库存 |\n")
+        f.write("| :---: | :---: | :---: |\n")
+        f.write(f"| `{len(new_quotes)}` | `{PRUNE_COUNT}` | `{total_count}` |\n\n")
+        f.write("<details><summary><b>📡 API 调用统计 (点此展开)</b></summary>\n\n")
+        f.write("| API 名称 | ✅ 成功次数 | ❌ 失败/跳过 |\n")
+        f.write("| :--- | :---: | :---: |\n")
+        for name, data in stats_tracker.api_calls.items():
+            if data['success'] > 0 or data['fail'] > 0:
+                f.write(f"| {name} | {data['success']} | {data['fail']} |\n")
+        f.write("\n</details>\n\n")
+        f.write("### 🎲 新增条目预览 (Top 10)\n")
         f.write("| 内容 | 作者/出处 | 来源渠道 |\n")
         f.write("| :--- | :--- | :--- |\n")
-        for q in new_quotes[:min(15, len(new_quotes))]:
-            safe_text = q['text'].replace('|', '\\|')
+        for q in new_quotes[:min(10, len(new_quotes))]:
+            safe_text = q['text'].replace('|', '\\|').replace('\n', ' ')
             safe_author = q['author'].replace('|', '\\|')
-            safe_source = q.get('source_name', '未知来源')
-            f.write(f"| {safe_text} | {safe_author} | {safe_source} |\n")
+            safe_source = q.get('source_name', '未知')
+            f.write(f"| {safe_text} | {safe_author} | `{safe_source}` |\n")
 
 if __name__ == "__main__":
-    start_time = time.time()
+    Log.info("脚本启动...")
     
     try:
-        existing_set, existing_rows = load_existing_quotes()
-        if len(existing_rows) >= TARGET_COUNT: 
-            existing_rows = prune_old_quotes(existing_rows, TARGET_COUNT)
-            existing_set = {f"{row['text']}-{row['author']}" for row in existing_rows}
-        new_quotes = fetch_new_quotes(TARGET_COUNT, existing_set)
-        if len(new_quotes) > 0:
-            final_list = existing_rows + new_quotes
-            if rewrite_csv(final_list):
-                generate_summary(new_quotes, len(final_list))
-                log("🎉 任务完成！", 'info')
+        exist_set, exist_rows = load_existing_quotes()
+        if len(exist_rows) >= PRUNE_COUNT:
+            exist_rows = prune_old_quotes(exist_rows, PRUNE_COUNT)
+            exist_set = {f"{r['text']}-{r['author']}" for r in exist_rows}
+        new_data = fetch_new_quotes(TARGET_COUNT, exist_set)
+        
+        if len(new_data) > 0:
+            final_data = exist_rows + new_data
+            if rewrite_csv(final_data):
+                generate_report(new_data, len(final_data))
             else:
                 sys.exit(1)
         else:
-            log("⚠️ 没有获取到新语录，文件保持不变", 'warning') 
+            Log.warning("本次运行未获取到任何新数据。")
+            
+    except KeyboardInterrupt:
+        Log.error("用户中断操作")
+        sys.exit(130)
     except Exception as e:
-        log(f"严重错误: {e}", 'error')
+        Log.error(f"未捕获的异常: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
