@@ -25,52 +25,38 @@
 
 ## ⚡️ 快速接入 / Quick Access
 
-请根据你的使用场景选择最佳的数据源：
+### 🟢 虽然简单，但是稳定 (Official Source)
+> 适用于：**Python 爬虫**、**数据备份**、**后端同步**、**Git Submodule**
 
-<table width="100%">
-  <tr>
-    <th width="50%"><div align="center">📦 Source (开发/备份)</div></th>
-    <th width="50%"><div align="center">🚀 CDN (生产/Web)</div></th>
-  </tr>
-  <tr>
-    <td valign="top">
-
-<div align="center">
-**适合：Python 脚本、数据分析、后端同步**
-<br/>
-<a href="https://raw.githubusercontent.com/rksk102/bonjourr-chinese-quotes/main/quotes.csv"><img src="https://img.shields.io/badge/GitHub_Raw-Download-2ea44f?style=flat-square&logo=github" height="25"></a>
-</div>
+[![Raw](https://img.shields.io/badge/GitHub_Raw-Source_File-2ea44f?style=for-the-badge&logo=github&logoColor=white)](https://raw.githubusercontent.com/rksk102/bonjourr-chinese-quotes/main/quotes.csv)
 
 ```url
 https://raw.githubusercontent.com/rksk102/bonjourr-chinese-quotes/main/quotes.csv
 ```
 
-    </td>
-    <td valign="top">
+### 🟠 速度更快，适合网页 (CDN Accelerated)
+> 适用于：**Bonjourr 扩展**、**Web 前端应用**、**静态网页**
 
-<div align="center">
-**适合：网页引用、前端应用、Bonjourr**
-<br/>
-<a href="https://cdn.jsdelivr.net/gh/rksk102/bonjourr-chinese-quotes@main/quotes.csv"><img src="https://img.shields.io/badge/jsDelivr-Accelerated-ff5627?style=flat-square&logo=jsdelivr" height="25"></a>
-</div>
+[![CDN](https://img.shields.io/badge/jsDelivr-CDN_Accelerated-ff5627?style=for-the-badge&logo=jsdelivr&logoColor=white)](https://cdn.jsdelivr.net/gh/rksk102/bonjourr-chinese-quotes@main/quotes.csv)
 
 ```url
 https://cdn.jsdelivr.net/gh/rksk102/bonjourr-chinese-quotes@main/quotes.csv
 ```
 
-    </td>
-  </tr>
-</table>
-
 <details>
-<summary><strong>🛠 查看 Python 读取示例 (Click to expand)</strong></summary>
+<summary><strong>🐍 Python 读取数据示例代码 (Click to expand)</strong></summary>
 
 ```python
 import pandas as pd
 
+# 直接读取 GitHub Raw 地址
 url = "https://raw.githubusercontent.com/rksk102/bonjourr-chinese-quotes/main/quotes.csv"
-df = pd.read_csv(url)
-print(df.sample(1))
+try:
+    df = pd.read_csv(url)
+    print(f'成功加载 {len(df)} 条语录！')
+    print(df.sample(1))
+except Exception as e:
+    print('加载失败:', e)
 ```
 </details>
 
@@ -78,7 +64,7 @@ print(df.sample(1))
 
 ## 📊 数据看板 / Dashboard
 
-> **更新日志**: 2026-01-22 21:18:24 UTC+8 (UTC+8)
+> **更新日志**: 2026-01-22 21:21:34 UTC+8 (UTC+8)
 
 | 指标 | 当前数值 | 较昨日变化 |
 | :--- | :--- | :--- |
