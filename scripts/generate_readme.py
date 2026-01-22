@@ -257,7 +257,6 @@ def generate_step_summary(ctx: dict, diagnositcs: list[str]):
         md.append("No warnings or errors detected. CSV structure looks good.")
     Path(summary_path).write_text("\n".join(md), encoding="utf-8")
 
-
 def main():
     start_time = time.time()
     Logger.banner("STARTING README GENERATION JOB")
@@ -267,50 +266,66 @@ def main():
     csv_rel = os.getenv("QUOTES_CSV", "quotes.csv")
     csv_path = Path(csv_rel)
     readme_path = Path("README.md")
+    
     Logger.info(f"Repo: {repo} | Branch: {branch}")
+
     old_row_count = 0
     if readme_path.exists():
         Logger.info("Reading existing README for history comparison...", "HISTORY")
-        old_content = read_text_smart(readme_path)
-        old_row_count = extract_old_stats(old_content)
-        Logger.info(f"Previous count: {old_row_count}")
+        try:
+            old_content = read_text_smart(readme_path)
+            old_row_count = extract_old_stats(old_content)
+        except:
+            pass
+
     Logger.section("Processing CSV Data")
     try:
         rows, load_stats = load_data(csv_path)
     except Exception as e:
         Logger.error(f"Failed to load CSV: {e}")
         return 1
-
     has_header = False
     header = []
+    q_idx, a_idx = 0, 1
+    
     if len(rows) > 0:
-        first = [c.lower() for c in rows[0]]
-        if "quote" in first or "content" in first or "text" in first:
+        first_row = [c.lower().strip() for c in rows[0]]
+        valid_quote_keys = ["quote", "text", "content", "语录", "句子", "内容", "名言"]
+        valid_author_keys = ["author", "source", "from", "writer", "作者", "出处", "来源"]
+
+        if any(k in first_row for k in valid_quote_keys + valid_author_keys):
             has_header = True
             header = rows[0]
             Logger.info(f"Detected Header: {header}", "CSV")
+
+            for i, h in enumerate(first_row):
+                if h in valid_quote_keys: 
+                    q_idx = i
+                elif h in valid_author_keys: 
+                    a_idx = i
+            
+            Logger.info(f"Mapped Columns -> Quote: Col {q_idx}, Author: Col {a_idx}")
     data_rows = rows[1:] if has_header else rows
     rows_count = len(data_rows)
     
     if rows_count == 0:
         Logger.error("CSV has no data rows!")
         return 1
-    Logger.success(f"Parsed {rows_count} valid data rows.")
 
+    Logger.success(f"Parsed {rows_count} valid data rows.")
     Logger.section("Picking Daily Sample")
     seed_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     rnd = random.Random(seed_date)
-    sample_row = rnd.choice(data_rows)
-
-    q_idx, a_idx = 0, 1
-    if has_header:
-        for i, h in enumerate([x.lower() for x in header]):
-            if h in ["quote", "text", "content"]: q_idx = i
-            if h in ["author", "source", "from"]: a_idx = i
-    s_quote = sample_row[q_idx] if len(sample_row) > q_idx else "Unknown"
-    s_author = sample_row[a_idx] if len(sample_row) > a_idx else ""
     
-    Logger.info(f"Selected: {s_quote[:30]}...", "DAILY")
+    if not data_rows:
+        s_quote, s_author = "No data available", "System"
+    else:
+        sample_row = rnd.choice(data_rows)
+        s_quote = sample_row[q_idx] if len(sample_row) > q_idx else "Unknown"
+        s_author = sample_row[a_idx] if len(sample_row) > a_idx else "佚名"
+
+    Logger.info(f"Selected: {s_quote[:20]}... -- {s_author}", "DAILY")
+
     ctx = {
         "repo": repo,
         "rows_count": rows_count,
@@ -327,11 +342,10 @@ def main():
     new_readme = build_readme_content(ctx, {"quote": s_quote, "author": s_author})
     readme_path.write_text(new_readme, encoding="utf-8")
     Logger.success(f"README.md updated ({len(new_readme)} bytes written)")
+
     ctx['exec_time'] = time.time() - start_time
-    generate_step_summary(ctx, [])
+    generate_step_summary(ctx, []) 
     Logger.banner(f"JOB COMPLETED IN {ctx['exec_time']:.2f}s")
-    Logger.info(f"Final Count: {rows_count} (Change: {ctx['diff_count']:+d})", "RESULT")
-    
     return 0
 
 if __name__ == "__main__":
