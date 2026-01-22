@@ -1,8 +1,6 @@
 name: "✨ Auto-Generate README"
 
 on:
-  schedule:
-    - cron: "30 0 * * *"
   workflow_dispatch:
     inputs:
       force_run:
