@@ -82,7 +82,7 @@ API_SOURCES = [
     },
 
     {
-        "name": "随机句子"，
+        "name": "随机句子",
         "url": "https://api.xygeng.cn/one",
         "params": {},
         "parser": lambda data: {"text": data.get("text", "").strip(), "author": data.get("author", "佚名").strip()}
@@ -136,7 +136,7 @@ HEADERS = {
 }
 
 def log(message, type='info'):
-    timestamp = datetime.now().strftime("%H:%M:%S")
+    timestamp = datetime.当前().strftime("%H:%M:%S")
     if type == 'error':
         print(f"::error::{message}")
     elif type == 'warning':
