@@ -62,7 +62,6 @@ API_SOURCES = [
         "params": {"c": "d", "encode": "json"},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
     },
-
     {
         "name": "今日诗词",
         "url": "https://v2.jinrishici.com/one.json",
@@ -83,7 +82,7 @@ API_SOURCES = [
     },
 
     {
-        "name": "随机句子",
+        "name": "随机句子"，
         "url": "https://api.xygeng.cn/one",
         "params": {},
         "parser": lambda data: {"text": data.get("text", "").strip(), "author": data.get("author", "佚名").strip()}
@@ -100,7 +99,6 @@ API_SOURCES = [
         "params": {},
         "parser": lambda data: {"text": data.get("data", {}).get("hitokoto", "").strip(), "author": data.get("data", {}).get("from", "佚名").strip()}
     },
-
     {
         "name": "励志名言",
         "url": "https://api.oick.cn/dutang/api.php",
@@ -119,7 +117,6 @@ API_SOURCES = [
         "params": {},
         "parser": lambda data: {"text": data.get("text", "").strip(), "author": data.get("author", "佚名").strip()}
     },
-
     {
         "name": "文艺句子",
         "url": "https://api.oick.cn/wenyi/api.php",
