@@ -95,13 +95,16 @@ def build_readme_content(ctx: dict, sample: dict) -> str:
     elif diff_val < 0:
         diff_display = str(diff_val)
     else:
-        diff_display = "-"
+        diff_display = "-" 
+
     checksum_short = ctx['csv_sha'][:12] + "..."
     link_raw = ctx['links']['raw']
     link_cdn = f"https://cdn.jsdelivr.net/gh/{repo}@{branch}/quotes.csv"
     b_quotes = make_badge("QUOTES", ctx['rows_count'], "4F46E5", "googledocs") 
     b_size   = make_badge("SIZE", f"{ctx['size_kb']} KB", "059669", "database")
     b_time   = make_badge("UPDATE", "TODAY", "BE185D", "clock")
+    btn_raw_img = f"https://img.shields.io/badge/GitHub_Raw-Source_File-2ea44f?style=for-the-badge&logo=github&logoColor=white"
+    btn_cdn_img = f"https://img.shields.io/badge/jsDelivr-CDN_Accelerated-ff5627?style=for-the-badge&logo=jsdelivr&logoColor=white"
 
     md = [
         "<!-- AUTO-GENERATED -->",
@@ -133,52 +136,39 @@ def build_readme_content(ctx: dict, sample: dict) -> str:
 
         "## ⚡️ 快速接入 / Quick Access",
         "",
-        "请根据你的使用场景选择最佳的数据源：",
+        "### 🟢 虽然简单，但是稳定 (Official Source)",
+        "> 适用于：**Python 爬虫**、**数据备份**、**后端同步**、**Git Submodule**",
         "",
-        '<table width="100%">',
-        "  <tr>",
-        '    <th width="50%"><div align="center">📦 Source (开发/备份)</div></th>',
-        '    <th width="50%"><div align="center">🚀 CDN (生产/Web)</div></th>',
-        "  </tr>",
-        "  <tr>",
-        '    <td valign="top">',
-        "",
-        '<div align="center">',
-        "**适合：Python 脚本、数据分析、后端同步**",
-        "<br/>",
-        f'<a href="{link_raw}"><img src="https://img.shields.io/badge/GitHub_Raw-Download-2ea44f?style=flat-square&logo=github" height="25"></a>',
-        "</div>",
+        f"[![Raw]({btn_raw_img})]({link_raw})",
         "",
         "```url",
         link_raw,
         "```",
         "",
-        "    </td>",
-        '    <td valign="top">',
+        "### 🟠 速度更快，适合网页 (CDN Accelerated)",
+        "> 适用于：**Bonjourr 扩展**、**Web 前端应用**、**静态网页**",
         "",
-        '<div align="center">',
-        "**适合：网页引用、前端应用、Bonjourr**",
-        "<br/>",
-        f'<a href="{link_cdn}"><img src="https://img.shields.io/badge/jsDelivr-Accelerated-ff5627?style=flat-square&logo=jsdelivr" height="25"></a>',
-        "</div>",
+        f"[![CDN]({btn_cdn_img})]({link_cdn})",
         "",
         "```url",
         link_cdn,
         "```",
         "",
-        "    </td>",
-        "  </tr>",
-        "</table>",
-        "",
+
         "<details>",
-        "<summary><strong>🛠 查看 Python 读取示例 (Click to expand)</strong></summary>",
+        "<summary><strong>🐍 Python 读取数据示例代码 (Click to expand)</strong></summary>",
         "",
         "```python",
         "import pandas as pd",
         "",
+        "# 直接读取 GitHub Raw 地址",
         f'url = "{link_raw}"',
-        "df = pd.read_csv(url)",
-        "print(df.sample(1))",
+        "try:",
+        "    df = pd.read_csv(url)",
+        "    print(f'成功加载 {len(df)} 条语录！')",
+        "    print(df.sample(1))",
+        "except Exception as e:",
+        "    print('加载失败:', e)",
         "```",
         "</details>",
         "",
