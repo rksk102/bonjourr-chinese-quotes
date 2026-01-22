@@ -224,7 +224,7 @@ def fetch_new_quotes(count, existing_set):
         while len(new_quotes) < count:
             needed = count - len(new_quotes)
             batch_size = min(needed, MAX_WORKERS * 2)
-            source_index = random.randint(0， len(API_SOURCES) - 1)
+            source_index = random.randint(0, len(API_SOURCES) - 1)
             futures = [executor.submit(fetch_one_quote, source_index) for _ in range(batch_size)]
             round_success = 0
             for future in concurrent.futures.as_completed(futures):
