@@ -10,6 +10,8 @@ jobs:
   update_quotes:
     name: 🚀 Quote Engine
     runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.git_commit.outputs.changed }}
     
     steps:
       - name: 📥 Checkout Code
@@ -25,7 +27,7 @@ jobs:
           
           echo -e "\033[36m"
           echo "============================================"
-          echo "      ✨ DAILY QUOTES UPDATER v2.0 ✨       "
+          echo "      ✨ DAILY QUOTES UPDATER v2.1 ✨       "
           echo "============================================"
           echo -e "\033[0m"
 
@@ -34,6 +36,7 @@ jobs:
         run: python scripts/update.py
         env:
           PYTHONIOENCODING: utf-8
+          MAX_QUOTE_LENGTH: "15"
 
       - name: 📊 Verify Data Integrity
         if: success()
@@ -64,7 +67,7 @@ jobs:
             echo "🤔 No changes detected. Skipping commit."
             echo "changed=false" >> $GITHUB_OUTPUT
           else
-            git commit -m "📅 [Auto] Quotes Update $(date +'%Y-%m-%d') | +15/-15"
+            git commit -m "📅 [Auto] Quotes Update $(date +'%Y-%m-%d')"
             git push
             echo "🚀 Changes pushed to repository successfully."
             echo "changed=true" >> $GITHUB_OUTPUT
