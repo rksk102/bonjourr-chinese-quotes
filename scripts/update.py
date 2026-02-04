@@ -148,17 +148,17 @@ def generate_report(new_quotes, total_count, removed_count):
     summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
     if not summary_path: return
     with open(summary_path, 'w', encoding='utf-8') as f:
-        f.write("# ✨ Update Report\n")
-        f.write(f"| Added | Removed | Total | Limit |\n")
+        f.write("# ✨ 语录自动更新报告\n")
+        f.write(f"| 今日新增 | 今日移除 | 库存总量 | 长度限制 |\n")
         f.write(f"| :---: | :---: | :---: | :---: |\n")
-        f.write(f"| `{len(new_quotes)}` | `{removed_count}` | `{total_count}` | `{MAX_LENGTH}` |\n\n")
-        f.write("### 📡 API Stats\n| Source | Success | Too Long | Failed |\n| :--- | :---: | :---: | :---: |\n")
+        f.write(f"| `{len(new_quotes)}` | `{removed_count}` | `{total_count}` | `{MAX_LENGTH}字` |\n\n")
+        f.write("### 📡 API 统计\n| 接口名称 | 成功 | 太长过滤 | 失败 |\n| :--- | :---: | :---: | :---: |\n")
         for name, data in stats_tracker.api_calls.items():
             if any(data.values()):
                 f.write(f"| {name} | {data['success']} | {data['too_long']} | {data['fail']} |\n")
         if new_quotes:
-            f.write("\n### 🎲 Preview\n| Len | Text | Author |\n| :---: | :--- | :--- |\n")
-            for q in new_quotes[:10]:
+            f.write("\n### 🎲 新增内容预览\n| 字数 | 语录内容 | 作者 |\n| :---: | :--- | :--- |\n")
+            for q in new_quotes:
                 f.write(f"| {len(q['text'])} | {q['text']} | {q['author']} |\n")
 
 if __name__ == "__main__":
@@ -172,9 +172,9 @@ if __name__ == "__main__":
                 writer = csv.DictWriter(f, fieldnames=['author', 'text'], extrasaction='ignore')
                 writer.writerows(final_rows)
             generate_report(new_list, len(final_rows), len(old_rows) - len(kept_rows))
-            Log.success(f"Done! +{len(new_list)} / -{len(old_rows) - len(kept_rows)}")
+            Log.success(f"Success! +{len(new_list)} / -{len(old_rows) - len(kept_rows)}")
         else:
-            Log.warning("No data found.")
+            Log.warning("No new quotes found.")
     except Exception as e:
         Log.error(f"Fatal: {e}")
         sys.exit(1)
