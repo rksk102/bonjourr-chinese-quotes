@@ -14,35 +14,37 @@ PRUNE_COUNT = 15
 OUTPUT_FILE = "quotes.csv"
 MAX_WORKERS = 4
 REQUEST_TIMEOUT = 8
+MAX_LENGTH = 15
+
 API_SOURCES = [
     {
         "name": "一言（官方-动画）",
         "url": "https://v1.hitokoto.cn/",
-        "params": {"c": "a", "encode": "json", "min_length": 5, "max_length": 30},
+        "params": {"c": "a", "encode": "json", "min_length": 1, "max_length": MAX_LENGTH},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
     },
     {
         "name": "一言（官方-漫画）",
         "url": "https://v1.hitokoto.cn/",
-        "params": {"c": "b", "encode": "json", "min_length": 5, "max_length": 30},
+        "params": {"c": "b", "encode": "json", "min_length": 1, "max_length": MAX_LENGTH},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
     },
     {
         "name": "一言（官方-文学）",
         "url": "https://v1.hitokoto.cn/",
-        "params": {"c": "d", "encode": "json", "min_length": 5, "max_length": 30},
+        "params": {"c": "d", "encode": "json", "min_length": 1, "max_length": MAX_LENGTH},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
     },
     {
         "name": "一言（官方-诗词）",
         "url": "https://v1.hitokoto.cn/",
-        "params": {"c": "i", "encode": "json", "min_length": 5, "max_length": 30},
+        "params": {"c": "i", "encode": "json", "min_length": 1, "max_length": MAX_LENGTH},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
     },
     {
         "name": "一言（官方-哲学）",
         "url": "https://v1.hitokoto.cn/",
-        "params": {"c": "k", "encode": "json", "min_length": 5, "max_length": 30},
+        "params": {"c": "k", "encode": "json", "min_length": 1, "max_length": MAX_LENGTH},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()}
     },
     {
@@ -60,7 +62,7 @@ API_SOURCES = [
 ]
 
 HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    'User-Agent': 'Mozilla/5.0 (GitHub Actions; Quote Updater) AppleWebKit/537.36 (KHTML, like Gecko)'
 }
 
 class Log:
@@ -70,7 +72,7 @@ class Log:
     GREEN = '\033[92m'
     YELLOW = '\033[93m'
     RED = '\033[91m'
-    BOLD = '\033[1m'
+    
     @staticmethod
     def info(msg):
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -93,13 +95,16 @@ class Log:
 
 class Stats:
     def __init__(self):
-        self.api_calls = {source['name']: {'success': 0, 'fail': 0} for source in API_SOURCES}
+        self.api_calls = {source['name']: {'success': 0, 'fail': 0, 'too_long': 0} for source in API_SOURCES}
     def record_success(self, name):
         if name in self.api_calls:
             self.api_calls[name]['success'] += 1
     def record_fail(self, name):
         if name in self.api_calls:
             self.api_calls[name]['fail'] += 1
+    def record_too_long(self, name):
+        if name in self.api_calls:
+            self.api_calls[name]['too_long'] += 1
 stats_tracker = Stats()
 
 def load_existing_quotes():
@@ -107,10 +112,12 @@ def load_existing_quotes():
     Log.group_start("📖 正在读取历史数据")
     existing_set = set()
     existing_rows = []
+    
     if not os.path.exists(OUTPUT_FILE):
         Log.warning(f"文件 {OUTPUT_FILE} 不存在，将初始化新文件")
         Log.group_end()
         return existing_set, existing_rows
+        
     try:
         with open(OUTPUT_FILE, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f, fieldnames=['author', 'text'])
@@ -126,6 +133,7 @@ def load_existing_quotes():
         Log.info(f"读取成功 | 当前总数: {len(existing_rows)}")
     except Exception as e:
         Log.error(f"读取文件时发生错误: {e}")
+    
     Log.group_end()
     return existing_set, existing_rows
 
@@ -133,32 +141,42 @@ def prune_old_quotes(existing_rows, count_to_remove):
     """随机删除旧数据"""
     current_count = len(existing_rows)
     Log.group_start(f"✂️ 数据修剪 (目标删除: {count_to_remove})")
+    
     if current_count <= count_to_remove:
         Log.warning(f"当前条数 ({current_count}) 不足，跳过删除操作")
         Log.group_end()
         return existing_rows
+        
     Log.info(f"正在从 {current_count} 条数据中随机移除 {count_to_remove} 条...")
     random.shuffle(existing_rows)
     kept_rows = existing_rows[:current_count - count_to_remove]
+    
     Log.success(f"修剪完成 | 剩余: {len(kept_rows)}")
     Log.group_end()
     return kept_rows
 
 def fetch_one_quote(source_index=0):
-    """单条抓取逻辑（带详细错误记录）"""
-    start_time = time.time()
+    """单条抓取逻辑（带详细错误记录和长度过滤）"""
     for i in range(source_index, len(API_SOURCES)):
         source = API_SOURCES[i]
         try:
             params_str = "&".join([f"{k}={v}" for k, v in source["params"].items()])
             url = f"{source['url']}?{params_str}" if params_str else source['url']
+            
             req = urllib.request.Request(url, headers=HEADERS)
             with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as response:
-                data = json.loads(response.read().decode('utf-8'))
+                raw_data = response.read().decode('utf-8')
+                data = json.loads(raw_data)
+                
                 parsed = source["parser"](data)
                 text = parsed.get("text", "")
-                author = parsed.get("author", "佚名")
+                author = parsed.get("author", "佚名").replace('\n', '')
+                
                 if text:
+                    if len(text) > MAX_LENGTH:
+                        stats_tracker.record_too_long(source['name'])
+                        continue
+                    
                     stats_tracker.record_success(source['name'])
                     return {
                         'text': text, 
@@ -181,38 +199,47 @@ def fetch_new_quotes(target, existing_set):
     """并发抓取主循环"""
     new_quotes = []
     consecutive_failures = 0
-    MAX_CONSECUTIVE_FAILURES = 50
+    MAX_CONSECUTIVE_FAILURES = 100 
+    
     print("\n")
-    Log.info(f"开始网络作业 | 目标新增: {target} 条")
+    Log.info(f"开始网络作业 | 目标新增: {target} 条 | 长度限制: <={MAX_LENGTH}字")
+    
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         while len(new_quotes) < target:
             needed = target - len(new_quotes)
-            batch_size = min(needed + 2, MAX_WORKERS * 2) 
+            batch_size = min(needed + 5, MAX_WORKERS * 3) 
             futures = []
+            
             for _ in range(batch_size):
                 src_idx = random.randint(0, len(API_SOURCES) - 1)
                 futures.append(executor.submit(fetch_one_quote, src_idx))
+            
             round_has_success = False
             for future in concurrent.futures.as_completed(futures):
                 result = future.result()
                 if result:
                     u_key = f"{result['text']}-{result['author']}"
+
                     if u_key not in existing_set:
                         current_new_keys = {f"{q['text']}-{q['author']}" for q in new_quotes}
                         if u_key not in current_new_keys:
                             new_quotes.append(result)
                             existing_set.add(u_key)
                             round_has_success = True
+                            
                             if len(new_quotes) <= target:
                                 draw_progress_bar(len(new_quotes), target)
+            
             if not round_has_success:
                 consecutive_failures += 1
             else:
                 consecutive_failures = 0
+                
             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                 print()
-                Log.error(f"连续 {MAX_CONSECUTIVE_FAILURES} 次抓取失败，提前终止。")
+                Log.error(f"连续 {MAX_CONSECUTIVE_FAILURES} 次抓取失败（找不到足够的短句或网络问题），提前终止。")
                 break
+                
     print()
     Log.success(f"抓取作业完成 | 实际获取: {len(new_quotes)} 条")
     return new_quotes
@@ -233,41 +260,49 @@ def rewrite_csv(all_quotes):
         return False
 
 def generate_report(new_quotes, total_count):
-    """生成漂亮的 GitHub Summary"""
+    """生成详细的 GitHub Summary"""
     summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
     if not summary_path:
         return
+        
     with open(summary_path, 'w', encoding='utf-8') as f:
-        f.write("# ✨ 每日语录自动更新报告\n")
-        f.write(f"> **⏰ 运行时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (UTC)\n\n")
+        f.write("# ✨ 每日语录自动更新报告 (短句版)\n")
+        f.write(f"> **⏰ 运行时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (UTC)\n")
+        f.write(f"> **📏 长度限制**: `{MAX_LENGTH} 字以内`\n\n")
+        
         f.write("### 📊 核心指标\n")
         f.write("| 🆕 今日新增 | 📉 今日移除 | 📚 当前库存 |\n")
         f.write("| :---: | :---: | :---: |\n")
         f.write(f"| `{len(new_quotes)}` | `{PRUNE_COUNT}` | `{total_count}` |\n\n")
-        f.write("<details><summary><b>📡 API 调用统计 (点此展开)</b></summary>\n\n")
-        f.write("| API 名称 | ✅ 成功次数 | ❌ 失败/跳过 |\n")
-        f.write("| :--- | :---: | :---: |\n")
+        
+        f.write("<details><summary><b>📡 API 调用统计 (包含被过滤的长句)</b></summary>\n\n")
+        f.write("| API 名称 | ✅ 成功 | ⚠️ 太长(丢弃) | ❌ 失败/其他 |\n")
+        f.write("| :--- | :---: | :---: | :---: |\n")
         for name, data in stats_tracker.api_calls.items():
-            if data['success'] > 0 or data['fail'] > 0:
-                f.write(f"| {name} | {data['success']} | {data['fail']} |\n")
+            if data['success'] > 0 or data['fail'] > 0 or data['too_long'] > 0:
+                f.write(f"| {name} | {data['success']} | {data['too_long']} | {data['fail']} |\n")
         f.write("\n</details>\n\n")
-        f.write("### 🎲 新增条目预览 (Top 10)\n")
-        f.write("| 内容 | 作者/出处 | 来源渠道 |\n")
-        f.write("| :--- | :--- | :--- |\n")
-        for q in new_quotes[:min(10, len(new_quotes))]:
-            safe_text = q['text'].replace('|', '\\|').replace('\n', ' ')
-            safe_author = q['author'].replace('|', '\\|')
-            safe_source = q.get('source_name', '未知')
-            f.write(f"| {safe_text} | {safe_author} | `{safe_source}` |\n")
+        
+        if new_quotes:
+            f.write("### 🎲 新增条目预览 (Top 10)\n")
+            f.write("| 字数 | 内容 | 作者 | 来源 |\n")
+            f.write("| :---: | :--- | :--- | :--- |\n")
+            for q in new_quotes[:min(10, len(new_quotes))]:
+                safe_text = q['text'].replace('|', '\\|').replace('\n', ' ')
+                safe_author = q['author'].replace('|', '\\|')
+                safe_source = q.get('source_name', '未知')
+                f.write(f"| {len(q['text'])} | {safe_text} | {safe_author} | `{safe_source}` |\n")
 
 if __name__ == "__main__":
-    Log.info("脚本启动...")
+    Log.info(f"脚本启动 (Max Length: {MAX_LENGTH})...")
     
     try:
         exist_set, exist_rows = load_existing_quotes()
+        
         if len(exist_rows) >= PRUNE_COUNT:
             exist_rows = prune_old_quotes(exist_rows, PRUNE_COUNT)
             exist_set = {f"{r['text']}-{r['author']}" for r in exist_rows}
+            
         new_data = fetch_new_quotes(TARGET_COUNT, exist_set)
         
         if len(new_data) > 0:
@@ -277,8 +312,8 @@ if __name__ == "__main__":
             else:
                 sys.exit(1)
         else:
-            Log.warning("本次运行未获取到任何新数据。")
-            
+            Log.warning("本次运行未获取到任何符合要求(短句)的新数据。")
+
     except KeyboardInterrupt:
         Log.error("用户中断操作")
         sys.exit(130)
