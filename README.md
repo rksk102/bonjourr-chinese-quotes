@@ -13,8 +13,8 @@
 
 ### ☕️ 今日一言 (Daily Quote)
 
-<h2>❝ 思君如满月，夜夜减清辉。 ❞</h2>
-<p align="right">—— <b>赋得自君之出矣</b></p>
+<h2>❝ 从开始的第一天起，就回不去了。 ❞</h2>
+<p align="right">—— <b>流浪地球</b></p>
 
 </td></tr>
 </table>
@@ -34,21 +34,19 @@ https://raw.githubusercontent.com/rksk102/bonjourr-chinese-quotes/main/quotes.cs
 ### 🚀 全球加速 (Global CDNs)
 > 推荐生产环境使用。如果其中一个访问慢，可切换另一个。
 
-**1. jsDelivr** (推荐：快速、缓存强)
+**1. jsDelivr**
 [![jsd](https://img.shields.io/badge/jsDelivr-Global_CDN-ff5627?style=for-the-badge&logo=jsdelivr&logoColor=white)](https://cdn.jsdelivr.net/gh/rksk102/bonjourr-chinese-quotes@main/quotes.csv)
 ```url
 https://cdn.jsdelivr.net/gh/rksk102/bonjourr-chinese-quotes@main/quotes.csv
 ```
 
-**2. Statically** (备选：基于 Cloudflare/Fastly 多云分发)
+**2. Statically**
 [![stat](https://img.shields.io/badge/Statically-Multi_CDN-7c3aed?style=for-the-badge&logo=serverless&logoColor=white)](https://cdn.statically.io/gh/rksk102/bonjourr-chinese-quotes/main/quotes.csv)
 ```url
 https://cdn.statically.io/gh/rksk102/bonjourr-chinese-quotes/main/quotes.csv
 ```
 
 ### 🌏 区域镜像 (Mirrors)
-> 针对特定受限网络环境优化
-
 **ghproxy**
 [![ghp](https://img.shields.io/badge/ghproxy-Mirror_Proxy-f97316?style=for-the-badge&logo=googlecloud&logoColor=white)](https://mirror.ghproxy.com/https://raw.githubusercontent.com/rksk102/bonjourr-chinese-quotes/main/quotes.csv)
 ```url
@@ -56,32 +54,13 @@ https://mirror.ghproxy.com/https://raw.githubusercontent.com/rksk102/bonjourr-ch
 ```
 
 <details>
-<summary><strong>🐍 Python 读取数据示例代码 (Click to expand)</strong></summary>
+<summary><strong>🐍 Python 读取数据示例代码 (点击展开)</strong></summary>
 
 ```python
 import pandas as pd
-
-# 定义加速源列表
-urls = [
-    "https://cdn.jsdelivr.net/gh/rksk102/bonjourr-chinese-quotes@main/quotes.csv",      # 首选
-    "https://cdn.statically.io/gh/rksk102/bonjourr-chinese-quotes/main/quotes.csv",     # 备选
-    "https://raw.githubusercontent.com/rksk102/bonjourr-chinese-quotes/main/quotes.csv"       # 兜底
-]
-
-df = None
-for url in urls:
-    try:
-        print(f'正在尝试: {url} ...')
-        df = pd.read_csv(url)
-        print('✅ 加载成功！')
-        break
-    except Exception:
-        continue
-
-if df is not None:
-    print(df.sample(1))
-else:
-    print('❌ 所有源均无法连接')
+url = "https://cdn.jsdelivr.net/gh/rksk102/bonjourr-chinese-quotes@main/quotes.csv"
+df = pd.read_csv(url, names=['author', 'text'])
+print(df.sample(1))
 ```
 </details>
 
@@ -89,12 +68,12 @@ else:
 
 ## 📊 数据看板 / Dashboard
 
-> **更新日志**: 2026-02-04 09:39:42 UTC+8 (UTC+8)
+> **更新日志**: 2026-02-04 09:56:24 (UTC+8)
 
 | 指标 | 当前数值 | 较昨日变化 |
 | :--- | :--- | :--- |
-| **总语录数** | `30` | **+30** |
-| **文件完整性** | `be7b57fcafe5...` | SHA-256 Checksum |
+| **总语录数** | `30` | ±0 (保持平衡) |
+| **文件完整性** | `8ebe99d35e4c...` | SHA-256 Checksum |
 
 ---
 <div align="center">
