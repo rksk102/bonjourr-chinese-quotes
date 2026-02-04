@@ -4,7 +4,7 @@
 # 📜 Bonjourr Chinese Quotes
 <h3>精选中文语录数据集 · 每日自动更新</h3>
 
-<img src="https://img.shields.io/badge/QUOTES-30-4F46E5?style=for-the-badge&labelColor=24292e&logo=googledocs&logoColor=white" height="28"> <img src="https://img.shields.io/badge/SIZE-3%20KB-059669?style=for-the-badge&labelColor=24292e&logo=database&logoColor=white" height="28"> <img src="https://img.shields.io/badge/UPDATE-TODAY-BE185D?style=for-the-badge&labelColor=24292e&logo=clock&logoColor=white" height="28">
+<img src="https://img.shields.io/badge/QUOTES-30-4F46E5?style=for-the-badge&labelColor=24292e&logo=googledocs&logoColor=white" height="28"> <img src="https://img.shields.io/badge/SIZE-2%20KB-059669?style=for-the-badge&labelColor=24292e&logo=database&logoColor=white" height="28"> <img src="https://img.shields.io/badge/UPDATE-TODAY-BE185D?style=for-the-badge&labelColor=24292e&logo=clock&logoColor=white" height="28">
 
 <br/>
 
@@ -13,8 +13,8 @@
 
 ### ☕️ 今日一言 (Daily Quote)
 
-<h2>❝ 一起去看星星吧。 ❞</h2>
-<p align="right">—— <b>未来日记</b></p>
+<h2>❝ 思君如满月，夜夜减清辉。 ❞</h2>
+<p align="right">—— <b>赋得自君之出矣</b></p>
 
 </td></tr>
 </table>
@@ -89,12 +89,12 @@ else:
 
 ## 📊 数据看板 / Dashboard
 
-> **更新日志**: 2026-02-04 09:25:17 UTC+8 (UTC+8)
+> **更新日志**: 2026-02-04 09:39:42 UTC+8 (UTC+8)
 
 | 指标 | 当前数值 | 较昨日变化 |
 | :--- | :--- | :--- |
 | **总语录数** | `30` | **+30** |
-| **文件完整性** | `17492da25ae3...` | SHA-256 Checksum |
+| **文件完整性** | `be7b57fcafe5...` | SHA-256 Checksum |
 
 ---
 <div align="center">
