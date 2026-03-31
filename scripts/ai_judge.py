@@ -4,9 +4,14 @@ import httpx
 from typing import Dict, Any, Optional
 
 OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '')
-OPENROUTER_MODEL = os.environ.get('OPENROUTER_MODEL', 'openai/gpt-4o-mini')
+OPENROUTER_MODEL = os.environ.get('OPENROUTER_MODEL', 'meta-llama/llama-3.1-8b-instruct:free')
 OPENROUTER_BASE_URL = os.environ.get('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1')
 USE_OPENROUTER = os.environ.get('USE_AI_JUDGE', 'false').lower() == 'true'
+
+# 全局变量：AI失败计数和自动禁用标志
+_ai_fail_count = 0
+_ai_disabled = False
+MAX_AI_FAILURES = 5
 
 QUOTE_JUDGE_PROMPT = """你是一位专业的中国文化和语录鉴赏专家。请判断以下语录的质量，并给出评分和评价。
 
@@ -58,6 +63,11 @@ SIMPLE_QUOTE_JUDGE_PROMPT = """判断这条语录是否是好的、积极的、�
 
 
 def judge_quote_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
+    global _ai_fail_count, _ai_disabled
+    
+    if _ai_disabled:
+        return None
+    
     if not USE_OPENROUTER or not OPENROUTER_API_KEY:
         return None
     
@@ -81,8 +91,7 @@ def judge_quote_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
                 {"role": "user", "content": prompt}
             ],
             "temperature": 0.3,
-            "max_tokens": 500,
-            "response_format": {"type": "json_object"}
+            "max_tokens": 500
         }
         
         with httpx.Client(timeout=30.0) as client:
@@ -97,16 +106,29 @@ def judge_quote_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
                 content = result['choices'][0]['message']['content']
                 parsed = json.loads(content)
                 
+                _ai_fail_count = 0
                 parsed['ai_judged'] = True
                 parsed['model_used'] = OPENROUTER_MODEL
                 return parsed
             else:
+                _ai_fail_count += 1
                 print(f"⚠️  OpenRouter API error: {response.status_code}")
                 print(f"Response: {response.text}")
+                print(f"   Failure count: {_ai_fail_count}/{MAX_AI_FAILURES}")
+                
+                if _ai_fail_count >= MAX_AI_FAILURES:
+                    _ai_disabled = True
+                    print(f"⚠️  AI judge disabled after {_ai_fail_count} failures")
                 return None
                 
     except Exception as e:
+        _ai_fail_count += 1
         print(f"⚠️  AI judge failed: {e}")
+        print(f"   Failure count: {_ai_fail_count}/{MAX_AI_FAILURES}")
+        
+        if _ai_fail_count >= MAX_AI_FAILURES:
+            _ai_disabled = True
+            print(f"⚠️  AI judge disabled after {_ai_fail_count} failures")
         return None
 
 
@@ -164,8 +186,15 @@ def get_env_config() -> Dict[str, Any]:
         'use_openrouter': USE_OPENROUTER,
         'has_api_key': bool(OPENROUTER_API_KEY),
         'model': OPENROUTER_MODEL,
-        'base_url': OPENROUTER_BASE_URL
+        'base_url': OPENROUTER_BASE_URL,
+        'ai_disabled': _ai_disabled,
+        'ai_fail_count': _ai_fail_count
     }
+
+def reset_ai_state():
+    global _ai_fail_count, _ai_disabled
+    _ai_fail_count = 0
+    _ai_disabled = False
 
 
 if __name__ == "__main__":

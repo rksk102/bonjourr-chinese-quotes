@@ -159,9 +159,14 @@ def initialize_ai_judge():
     
     if not USE_AI_JUDGE or not AI_JUDGE_AVAILABLE:
         AI_STATS['ai_available'] = False
+        AI_STATS['ai_disabled'] = False
+        AI_STATS['ai_fail_count'] = 0
         return False
     
     try:
+        from ai_judge import reset_ai_state
+        reset_ai_state()
+        
         config = get_env_config()
         print("🤖 Checking OpenRouter AI Judge...")
         print(f"   Model configured: {config['model']}")
@@ -170,19 +175,27 @@ def initialize_ai_judge():
         if config['has_api_key']:
             AI_STATS['ai_available'] = True
             AI_STATS['model_used'] = config['model']
+            AI_STATS['ai_disabled'] = False
+            AI_STATS['ai_fail_count'] = 0
             print("✅ OpenRouter AI Judge ready!")
             return True
         else:
             AI_STATS['ai_available'] = False
+            AI_STATS['ai_disabled'] = False
             print("⚠️  No OpenRouter API key found, using NLP fallback")
             return False
             
     except Exception as e:
         AI_STATS['ai_available'] = False
+        AI_STATS['ai_disabled'] = False
         print(f"⚠️  OpenRouter AI Judge init failed: {e}")
         return False
 
 def get_ai_stats() -> Dict[str, Any]:
+    from ai_judge import get_env_config
+    config = get_env_config()
+    AI_STATS['ai_disabled'] = config.get('ai_disabled', False)
+    AI_STATS['ai_fail_count'] = config.get('ai_fail_count', 0)
     return AI_STATS.copy()
 
 def reset_ai_stats():
@@ -192,7 +205,8 @@ def reset_ai_stats():
         'ai_success_count': 0,
         'ai_fail_count': 0,
         'nlp_fallback_count': 0,
-        'model_used': None
+        'model_used': None,
+        'ai_disabled': False
     }
 
 _category_embeddings = {}
@@ -316,7 +330,7 @@ def assess_quality(quote: Dict[str, str]) -> Dict[str, Any]:
     text = quote.get('text', '')
     author = quote.get('author', '')
     
-    if USE_AI_JUDGE and AI_JUDGE_AVAILABLE and AI_STATS.get('ai_available', False):
+    if USE_AI_JUDGE and AI_JUDGE_AVAILABLE and AI_STATS.get('ai_available', False) and not AI_STATS.get('ai_disabled', False):
         try:
             ai_result = judge_quote_with_ai(quote)
             if ai_result:

@@ -531,14 +531,27 @@ def generate_report(new_quotes, total_count, removed_count):
         if ai_stats:
             f.write("## 🤖 AI 评估系统状态\n")
             ai_available = ai_stats.get('ai_available', False)
-            f.write(f"| AI评估器状态: {'✅ 运行中' if ai_available else '❌ 未启用'}\n")
-            if ai_available:
+            ai_disabled = ai_stats.get('ai_disabled', False)
+            
+            if ai_disabled:
+                f.write(f"| AI评估器状态: {'🔴 已禁用'}\n")
+                f.write(f"\n**原因**: 连续失败超过阈值，已自动禁用\n")
                 f.write(f"\n**使用的模型**: `{ai_stats.get('model_used', 'unknown')}`\n")
                 f.write(f"\n| 指标 | 数量 |\n")
                 f.write(f"| :--- | :---: |\n")
                 f.write(f"| AI成功评估 | {ai_stats.get('ai_success_count', 0)} |\n")
                 f.write(f"| AI失败次数 | {ai_stats.get('ai_fail_count', 0)} |\n")
                 f.write(f"| NLP回退次数 | {ai_stats.get('nlp_fallback_count', 0)} |\n")
+            elif ai_available:
+                f.write(f"| AI评估器状态: {'✅ 运行中'}\n")
+                f.write(f"\n**使用的模型**: `{ai_stats.get('model_used', 'unknown')}`\n")
+                f.write(f"\n| 指标 | 数量 |\n")
+                f.write(f"| :--- | :---: |\n")
+                f.write(f"| AI成功评估 | {ai_stats.get('ai_success_count', 0)} |\n")
+                f.write(f"| AI失败次数 | {ai_stats.get('ai_fail_count', 0)} |\n")
+                f.write(f"| NLP回退次数 | {ai_stats.get('nlp_fallback_count', 0)} |\n")
+            else:
+                f.write(f"| AI评估器状态: {'❌ 未启用'}\n")
             f.write("\n")
         
         f.write("## 📈 总体统计\n")
