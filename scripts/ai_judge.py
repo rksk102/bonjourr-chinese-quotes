@@ -1,4 +1,5 @@
 import os
+import time
 import json
 import httpx
 from typing import Dict, Any, Optional
@@ -62,15 +63,39 @@ _ai_fail_count = 0
 _ai_disabled = False
 MAX_AI_FAILURES = 5
 
+# 全局变量：AI速率限制
+_ai_request_times = []
+AI_RATE_LIMIT = 2
+AI_RATE_LIMIT_PERIOD = 60
+
 
 def judge_quote_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
-    global _ai_fail_count, _ai_disabled
+    global _ai_fail_count, _ai_disabled, _ai_request_times
     
     if _ai_disabled:
         return None
     
     if not USE_AI_JUDGE or not AIHUBMIX_API_KEY:
         return None
+    
+    # 速率限制检查
+    current_time = time.time()
+    # 清理超过周期的请求记录
+    _ai_request_times = [t for t in _ai_request_times if current_time - t < AI_RATE_LIMIT_PERIOD]
+    
+    if len(_ai_request_times) >= AI_RATE_LIMIT:
+        oldest_time = _ai_request_times[0]
+        wait_time = AI_RATE_LIMIT_PERIOD - (current_time - oldest_time)
+        if wait_time > 0:
+            print(f"⏳ AI速率限制，等待 {wait_time:.1f} 秒...")
+            time.sleep(wait_time)
+            # 等待后再次清理
+            current_time = time.time()
+            _ai_request_times = [t for t in _ai_request_times if current_time - t < AI_RATE_LIMIT_PERIOD]
+    
+    # 在发起请求之前记录时间，确保严格遵守速率限制
+    request_time = time.time()
+    _ai_request_times.append(request_time)
     
     text = quote.get('text', '')
     author = quote.get('author', '')
@@ -156,8 +181,29 @@ def judge_quote_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
 
 
 def quick_judge_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
+    global _ai_request_times
+    
     if not USE_AI_JUDGE or not AIHUBMIX_API_KEY:
         return None
+    
+    # 速率限制检查
+    current_time = time.time()
+    # 清理超过周期的请求记录
+    _ai_request_times = [t for t in _ai_request_times if current_time - t < AI_RATE_LIMIT_PERIOD]
+    
+    if len(_ai_request_times) >= AI_RATE_LIMIT:
+        oldest_time = _ai_request_times[0]
+        wait_time = AI_RATE_LIMIT_PERIOD - (current_time - oldest_time)
+        if wait_time > 0:
+            print(f"⏳ AI速率限制，等待 {wait_time:.1f} 秒...")
+            time.sleep(wait_time)
+            # 等待后再次清理
+            current_time = time.time()
+            _ai_request_times = [t for t in _ai_request_times if current_time - t < AI_RATE_LIMIT_PERIOD]
+    
+    # 在发起请求之前记录时间，确保严格遵守速率限制
+    request_time = time.time()
+    _ai_request_times.append(request_time)
     
     text = quote.get('text', '')
     author = quote.get('author', '')
@@ -210,9 +256,10 @@ def get_env_config() -> Dict[str, Any]:
 
 
 def reset_ai_state():
-    global _ai_fail_count, _ai_disabled
+    global _ai_fail_count, _ai_disabled, _ai_request_times
     _ai_fail_count = 0
     _ai_disabled = False
+    _ai_request_times = []
 
 
 if __name__ == "__main__":

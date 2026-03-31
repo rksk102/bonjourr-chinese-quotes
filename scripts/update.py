@@ -468,7 +468,6 @@ def fetch_exact_quotes(target, existing_rows):
 def evaluate_quotes_with_rate_limit(quotes):
     evaluated_quotes = []
     negative_quotes = []
-    ai_request_times = []
     
     Log.info("🧠 开始AI/NLP评估语录...")
     
@@ -491,16 +490,6 @@ def evaluate_quotes_with_rate_limit(quotes):
                     should_keep = breakdown['should_keep']
                     ai_judged = True
                     ai_reasoning = breakdown.get('reasoning', '')
-                
-                if ai_judged:
-                    ai_request_times.append(time.time())
-                    if len(ai_request_times) >= AI_RATE_LIMIT:
-                        oldest_time = ai_request_times[-AI_RATE_LIMIT]
-                        time_since = time.time() - oldest_time
-                        if time_since < AI_RATE_LIMIT_PERIOD:
-                            wait_time = AI_RATE_LIMIT_PERIOD - time_since
-                            Log.info(f"⏳ AI速率限制，等待 {wait_time:.1f} 秒...")
-                            time.sleep(wait_time)
                 
                 quote['nlp_analysis'] = analysis
                 quote['sentiment'] = sentiment
