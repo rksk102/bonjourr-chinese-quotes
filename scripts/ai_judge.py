@@ -78,24 +78,23 @@ def judge_quote_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
     if not USE_AI_JUDGE or not AIHUBMIX_API_KEY:
         return None
     
-    # 速率限制检查
-    current_time = time.time()
-    # 清理超过周期的请求记录
-    _ai_request_times = [t for t in _ai_request_times if current_time - t < AI_RATE_LIMIT_PERIOD]
-    
-    if len(_ai_request_times) >= AI_RATE_LIMIT:
+    # 速率限制检查 - 循环直到可以发起请求
+    while True:
+        current_time = time.time()
+        # 清理超过周期的请求记录
+        valid_times = [t for t in _ai_request_times if current_time - t < AI_RATE_LIMIT_PERIOD]
+        _ai_request_times = valid_times
+        
+        if len(_ai_request_times) < AI_RATE_LIMIT:
+            break
+        
+        # 需要等待
         oldest_time = _ai_request_times[0]
         wait_time = AI_RATE_LIMIT_PERIOD - (current_time - oldest_time)
         if wait_time > 0:
             print(f"⏳ AI速率限制，等待 {wait_time:.1f} 秒...")
+            # 实际等待，确保等待足够时间
             time.sleep(wait_time)
-            # 等待后再次清理
-            current_time = time.time()
-            _ai_request_times = [t for t in _ai_request_times if current_time - t < AI_RATE_LIMIT_PERIOD]
-    
-    # 在发起请求之前记录时间，确保严格遵守速率限制
-    request_time = time.time()
-    _ai_request_times.append(request_time)
     
     text = quote.get('text', '')
     author = quote.get('author', '')
@@ -114,6 +113,9 @@ def judge_quote_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
                 {"role": "user", "content": full_prompt}
             ]
         }
+        
+        # 发起请求前记录时间，只有成功才保留
+        request_start_time = time.time()
         
         with httpx.Client(timeout=30.0) as client:
             response = client.post(
@@ -155,6 +157,8 @@ def judge_quote_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
                         }
                 
                 _ai_fail_count = 0
+                # 只有成功才记录请求时间
+                _ai_request_times.append(request_start_time)
                 parsed['ai_judged'] = True
                 parsed['model_used'] = AIHUBMIX_MODEL
                 return parsed
@@ -186,24 +190,23 @@ def quick_judge_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
     if not USE_AI_JUDGE or not AIHUBMIX_API_KEY:
         return None
     
-    # 速率限制检查
-    current_time = time.time()
-    # 清理超过周期的请求记录
-    _ai_request_times = [t for t in _ai_request_times if current_time - t < AI_RATE_LIMIT_PERIOD]
-    
-    if len(_ai_request_times) >= AI_RATE_LIMIT:
+    # 速率限制检查 - 循环直到可以发起请求
+    while True:
+        current_time = time.time()
+        # 清理超过周期的请求记录
+        valid_times = [t for t in _ai_request_times if current_time - t < AI_RATE_LIMIT_PERIOD]
+        _ai_request_times = valid_times
+        
+        if len(_ai_request_times) < AI_RATE_LIMIT:
+            break
+        
+        # 需要等待
         oldest_time = _ai_request_times[0]
         wait_time = AI_RATE_LIMIT_PERIOD - (current_time - oldest_time)
         if wait_time > 0:
             print(f"⏳ AI速率限制，等待 {wait_time:.1f} 秒...")
+            # 实际等待，确保等待足够时间
             time.sleep(wait_time)
-            # 等待后再次清理
-            current_time = time.time()
-            _ai_request_times = [t for t in _ai_request_times if current_time - t < AI_RATE_LIMIT_PERIOD]
-    
-    # 在发起请求之前记录时间，确保严格遵守速率限制
-    request_time = time.time()
-    _ai_request_times.append(request_time)
     
     text = quote.get('text', '')
     author = quote.get('author', '')
@@ -223,6 +226,9 @@ def quick_judge_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
             ]
         }
         
+        # 发起请求前记录时间，只有成功才保留
+        request_start_time = time.time()
+        
         with httpx.Client(timeout=20.0) as client:
             response = client.post(
                 f"{AIHUBMIX_BASE_URL}/chat/completions",
@@ -234,6 +240,8 @@ def quick_judge_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
                 result = response.json()
                 content = result['choices'][0]['message']['content']
                 parsed = json.loads(content)
+                # 只有成功才记录请求时间
+                _ai_request_times.append(request_start_time)
                 parsed['ai_judged'] = True
                 return parsed
             else:
