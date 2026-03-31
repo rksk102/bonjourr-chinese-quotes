@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional
 OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '')
 OPENROUTER_MODEL = os.environ.get('OPENROUTER_MODEL', 'openai/gpt-4o-mini')
 OPENROUTER_BASE_URL = os.environ.get('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1')
-USE_OPENROUTER = os.environ.get('USE_OPENROUTER', 'false').lower() == 'true'
+USE_OPENROUTER = os.environ.get('USE_AI_JUDGE', 'false').lower() == 'true'
 
 QUOTE_JUDGE_PROMPT = """你是一位专业的中国文化和语录鉴赏专家。请判断以下语录的质量，并给出评分和评价。
 
