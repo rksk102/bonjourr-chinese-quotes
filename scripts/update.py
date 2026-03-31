@@ -17,6 +17,7 @@ try:
         deduplicate_quotes,
         smart_categorize_quote,
         filter_quotes_by_quality,
+        filter_negative_quotes,
         nlp_analyze_quote
     )
     NLP_AVAILABLE = True
@@ -329,11 +330,21 @@ class Stats:
     def __init__(self):
         self.api_calls = {s['name']: {'success': 0, 'fail': 0, 'too_long': 0, 'low_score': 0, 'not_chinese': 0} for s in API_SOURCES}
         self.category_counts = {'poetry': 0, 'philosophy': 0, 'literature': 0, 'other': 0}
+        self.filtered_quotes = []
+        self.negative_quotes = []
+        self.low_quality_quotes = []
+        self.duplicate_quotes = []
+        self.semantic_duplicates = []
     def record_success(self, name): self.api_calls[name]['success'] += 1
     def record_fail(self, name): self.api_calls[name]['fail'] += 1
     def record_too_long(self, name): self.api_calls[name]['too_long'] += 1
     def record_low_score(self, name): self.api_calls[name]['low_score'] += 1
     def record_not_chinese(self, name): self.api_calls[name]['not_chinese'] += 1
+    def add_filtered(self, quote, reason): self.filtered_quotes.append({'quote': quote, 'reason': reason})
+    def add_negative(self, quote, reason): self.negative_quotes.append({'quote': quote, 'reason': reason})
+    def add_low_quality(self, quote, grade, score): self.low_quality_quotes.append({'quote': quote, 'grade': grade, 'score': score})
+    def add_duplicate(self, quote): self.duplicate_quotes.append(quote)
+    def add_semantic_duplicate(self, quote): self.semantic_duplicates.append(quote)
 
 stats_tracker = Stats()
 
@@ -488,6 +499,7 @@ def generate_report(new_quotes, total_count, removed_count):
     category_dist = {}
     sentiment_dist = {'positive': 0, 'neutral': 0, 'negative': 0}
     quality_dist = {'A': 0, 'B': 0, 'C': 0, 'D': 0}
+    theme_dist = {}
     
     for q in new_quotes:
         cat = q.get('category', 'other')
@@ -501,45 +513,123 @@ def generate_report(new_quotes, total_count, removed_count):
             quality = analysis.get('quality', {})
             grade = quality.get('grade', 'D')
             quality_dist[grade] = quality_dist.get(grade, 0) + 1
+            
+            themes = analysis.get('themes', [])
+            for theme, score in themes:
+                theme_dist[theme] = theme_dist.get(theme, 0) + 1
+    
+    cat_names = {'poetry': '古诗词', 'philosophy': '哲学/名言', 'literature': '文学', 'other': '其他'}
+    sentiment_names = {'positive': '积极', 'neutral': '中性', 'negative': '消极'}
     
     with open(summary_path, 'w', encoding='utf-8') as f:
-        f.write("# ✨ 语录自动更新报告\n")
+        f.write("# ✨ 语录自动更新报告\n\n")
+        
+        f.write("## 📈 总体统计\n")
         f.write(f"| 今日新增 | 今日移除 | 库存总量 | 长度限制 | 评分阈值 |\n")
         f.write(f"| :---: | :---: | :---: | :---: | :---: |\n")
         f.write(f"| `{len(new_quotes)}` | `{removed_count}` | `{total_count}` | `{MIN_LENGTH}-{MAX_LENGTH}字` | `{SCORE_THRESHOLD}` |\n\n")
         
-        f.write("### 📊 类别分布\n")
-        f.write("| 类别 | 数量 |\n")
-        f.write("| :--- | :---: |\n")
-        cat_names = {'poetry': '古诗词', 'philosophy': '哲学/名言', 'literature': '文学', 'other': '其他'}
-        for cat, cnt in category_dist.items():
-            f.write(f"| {cat_names.get(cat, cat)} | {cnt} |\n")
+        total_filtered = (
+            len(stats_tracker.filtered_quotes) + 
+            len(stats_tracker.negative_quotes) + 
+            len(stats_tracker.low_quality_quotes) +
+            len(stats_tracker.semantic_duplicates)
+        )
+        if total_filtered > 0:
+            f.write(f"### 🚫 过滤统计\n")
+            f.write(f"| 过滤类型 | 数量 |\n")
+            f.write(f"| :--- | :---: |\n")
+            if len(stats_tracker.semantic_duplicates) > 0:
+                f.write(f"| 语义重复 | {len(stats_tracker.semantic_duplicates)} |\n")
+            if len(stats_tracker.negative_quotes) > 0:
+                f.write(f"| 消极情感 | {len(stats_tracker.negative_quotes)} |\n")
+            if len(stats_tracker.low_quality_quotes) > 0:
+                f.write(f"| 低质量 | {len(stats_tracker.low_quality_quotes)} |\n")
+            f.write("\n")
+        
+        f.write("## 📊 详细统计\n\n")
+        
+        f.write("<details>\n<summary>📈 类别分布</summary>\n\n")
+        f.write("| 类别 | 数量 | 占比 |\n")
+        f.write("| :--- | :---: | :---: |\n")
+        total = sum(category_dist.values()) if category_dist else 1
+        for cat, cnt in sorted(category_dist.items(), key=lambda x: x[1], reverse=True):
+            pct = f"{cnt/total*100:.1f}%"
+            f.write(f"| {cat_names.get(cat, cat)} | {cnt} | {pct} |\n")
+        f.write("\n</details>\n\n")
         
         if NLP_AVAILABLE and any(sentiment_dist.values()):
-            f.write("\n### 😊 情感分布\n")
-            f.write("| 情感 | 数量 |\n")
-            f.write("| :--- | :---: |\n")
-            sentiment_names = {'positive': '积极', 'neutral': '中性', 'negative': '消极'}
-            for sent, cnt in sentiment_dist.items():
+            f.write("<details>\n<summary>😊 情感分布</summary>\n\n")
+            f.write("| 情感 | 数量 | 占比 |\n")
+            f.write("| :--- | :---: | :---: |\n")
+            total_sent = sum(sentiment_dist.values()) if any(sentiment_dist.values()) else 1
+            for sent, cnt in sorted(sentiment_dist.items(), key=lambda x: x[1], reverse=True):
                 if cnt > 0:
-                    f.write(f"| {sentiment_names.get(sent, sent)} | {cnt} |\n")
+                    pct = f"{cnt/total_sent*100:.1f}%"
+                    f.write(f"| {sentiment_names.get(sent, sent)} | {cnt} | {pct} |\n")
+            f.write("\n</details>\n\n")
             
-            f.write("\n### ⭐ 质量分布\n")
-            f.write("| 等级 | 数量 |\n")
-            f.write("| :--- | :---: |\n")
-            for grade, cnt in quality_dist.items():
+            f.write("<details>\n<summary>⭐ 质量分布</summary>\n\n")
+            f.write("| 等级 | 数量 | 占比 |\n")
+            f.write("| :--- | :---: | :---: |\n")
+            total_quality = sum(quality_dist.values()) if any(quality_dist.values()) else 1
+            for grade in ['A', 'B', 'C', 'D']:
+                cnt = quality_dist.get(grade, 0)
                 if cnt > 0:
-                    f.write(f"| {grade}级 | {cnt} |\n")
+                    pct = f"{cnt/total_quality*100:.1f}%"
+                    f.write(f"| {grade}级 | {cnt} | {pct} |\n")
+            f.write("\n</details>\n\n")
+            
+            if theme_dist:
+                f.write("<details>\n<summary>🏷️ 主题分布</summary>\n\n")
+                f.write("| 主题 | 数量 |\n")
+                f.write("| :--- | :---: |\n")
+                for theme, cnt in sorted(theme_dist.items(), key=lambda x: x[1], reverse=True)[:8]:
+                    f.write(f"| {theme} | {cnt} |\n")
+                f.write("\n</details>\n\n")
         
-        f.write("\n### 📡 API 统计\n| 接口名称 | 成功 | 低分过滤 | 非中文过滤 | 太长/太短 | 失败 |\n| :--- | :---: | :---: | :---: | :---: | :---: |\n")
+        f.write("<details>\n<summary>📡 API 统计</summary>\n\n")
+        f.write("| 接口名称 | 成功 | 低分过滤 | 非中文过滤 | 太长/太短 | 失败 |\n")
+        f.write("| :--- | :---: | :---: | :---: | :---: | :---: |\n")
         for name, data in stats_tracker.api_calls.items():
             if any(data.values()):
                 f.write(f"| {name} | {data['success']} | {data.get('low_score', 0)} | {data.get('not_chinese', 0)} | {data['too_long']} | {data['fail']} |\n")
+        f.write("\n</details>\n\n")
+        
+        f.write("## 📝 语录详情\n\n")
         
         if new_quotes:
-            f.write("\n### 🎲 新增内容预览\n| 评分 | 类别 | 字数 | 语录内容 | 作者 |\n| :---: | :---: | :---: | :--- | :--- |\n")
-            for q in new_quotes[:10]:
-                f.write(f"| {q['score']} | {cat_names.get(q['category'], q['category'])} | {len(q['text'])} | {q['text']} | {q['author']} |\n")
+            f.write("<details>\n<summary>🎲 新增内容详情 ({len(new_quotes)}条)</summary>\n\n")
+            f.write("| # | 评分 | 等级 | 类别 | 情感 | 字数 | 语录内容 | 作者 |\n")
+            f.write("| :---: | :---: | :---: | :---: | :---: | :---: | :--- | :--- |\n")
+            for i, q in enumerate(new_quotes, 1):
+                grade = q.get('quality_grade', 'N/A')
+                sentiment_icon = {'positive': '😊', 'neutral': '😐', 'negative': '😢'}.get(q.get('sentiment', 'neutral'), '😐')
+                f.write(f"| {i} | {q['score']} | {grade} | {cat_names.get(q['category'], q['category'])} | {sentiment_icon} | {len(q['text'])} | {q['text']} | {q['author']} |\n")
+            f.write("\n</details>\n\n")
+        
+        if stats_tracker.negative_quotes:
+            f.write("<details>\n<summary>🚫 被过滤的消极语录 ({len(stats_tracker.negative_quotes)}条)</summary>\n\n")
+            f.write("| # | 语录内容 | 作者 | 过滤原因 |\n")
+            f.write("| :---: | :--- | :--- | :--- |\n")
+            for i, item in enumerate(stats_tracker.negative_quotes[:20], 1):
+                q = item['quote']
+                reason = item.get('reason', '消极情感')
+                f.write(f"| {i} | {q['text']} | {q['author']} | {reason} |\n")
+            if len(stats_tracker.negative_quotes) > 20:
+                f.write(f"\n*还有 {len(stats_tracker.negative_quotes) - 20} 条...*\n")
+            f.write("\n</details>\n\n")
+        
+        if stats_tracker.low_quality_quotes:
+            f.write("<details>\n<summary>⚠️ 被过滤的低质量语录 ({len(stats_tracker.low_quality_quotes)}条)</summary>\n\n")
+            f.write("| # | 语录内容 | 作者 | 等级 | 得分 |\n")
+            f.write("| :---: | :--- | :--- | :---: | :---: |\n")
+            for i, item in enumerate(stats_tracker.low_quality_quotes[:20], 1):
+                q = item['quote']
+                f.write(f"| {i} | {q['text']} | {q['author']} | {item['grade']} | {item['score']:.2f} |\n")
+            if len(stats_tracker.low_quality_quotes) > 20:
+                f.write(f"\n*还有 {len(stats_tracker.low_quality_quotes) - 20} 条...*\n")
+            f.write("\n</details>\n")
 
 if __name__ == "__main__":
     try:
@@ -553,14 +643,49 @@ if __name__ == "__main__":
             try:
                 Log.info("🧠 Applying NLP semantic deduplication...")
                 original_count = len(new_list)
-                new_list = deduplicate_quotes(new_list)
+                deduplicated_list = []
+                seen_texts = set()
+                
+                for quote in new_list:
+                    text = quote.get('text', '')
+                    if text not in seen_texts:
+                        deduplicated_list.append(quote)
+                        seen_texts.add(text)
+                    else:
+                        stats_tracker.add_duplicate(quote)
+                
+                new_list = deduplicate_quotes(deduplicated_list)
                 deduplicated = original_count - len(new_list)
                 if deduplicated > 0:
                     Log.info(f"Removed {deduplicated} semantic duplicates")
+                    for i in range(deduplicated):
+                        if i < len(stats_tracker.duplicate_quotes):
+                            stats_tracker.add_semantic_duplicate(stats_tracker.duplicate_quotes[i])
+                
+                Log.info("😊 Filtering negative sentiment quotes...")
+                original_count = len(new_list)
+                new_list, negative_quotes = filter_negative_quotes(new_list)
+                for nq in negative_quotes:
+                    stats_tracker.add_negative(nq, nq.get('negative_reason', '消极情感'))
+                if len(negative_quotes) > 0:
+                    Log.info(f"Filtered {len(negative_quotes)} negative quotes")
                 
                 Log.info("🎯 Filtering quotes by quality (min grade: C)...")
                 original_count = len(new_list)
-                new_list = filter_quotes_by_quality(new_list, min_grade='C')
+                filtered_list = []
+                for quote in new_list:
+                    quality = nlp_analyze_quote(quote).get('quality', {})
+                    grade = quality.get('grade', 'D')
+                    score = quality.get('total_score', 0)
+                    
+                    if grade in ['A', 'B', 'C']:
+                        quote['quality_grade'] = grade
+                        quote['quality_score'] = score
+                        filtered_list.append(quote)
+                    else:
+                        stats_tracker.add_low_quality(quote, grade, score)
+                
+                new_list = filtered_list
                 filtered = original_count - len(new_list)
                 if filtered > 0:
                     Log.info(f"Filtered {filtered} low-quality quotes")
@@ -569,6 +694,8 @@ if __name__ == "__main__":
                 for quote in new_list:
                     analysis = nlp_analyze_quote(quote)
                     quote['nlp_analysis'] = analysis
+                    quote['sentiment'] = analysis.get('sentiment', 'neutral')
+                    quote['quality_grade'] = analysis.get('quality', {}).get('grade', 'C')
                     
             except Exception as e:
                 Log.warning(f"NLP processing skipped: {e}")

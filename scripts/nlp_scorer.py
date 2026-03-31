@@ -350,6 +350,24 @@ def filter_quotes_by_quality(quotes: List[Dict], min_grade: str = 'C') -> List[D
     
     return filtered
 
+def filter_negative_quotes(quotes: List[Dict]) -> tuple:
+    positive_quotes = []
+    negative_quotes = []
+    
+    for quote in quotes:
+        text = quote.get('text', '')
+        sentiment = analyze_sentiment(text)
+        
+        if sentiment['sentiment'] == 'negative':
+            quote['negative_reason'] = f"情感得分: {sentiment['negative_score']:.2f}"
+            negative_quotes.append(quote)
+        else:
+            quote['sentiment'] = sentiment['sentiment']
+            quote['sentiment_score'] = sentiment['positive_score']
+            positive_quotes.append(quote)
+    
+    return positive_quotes, negative_quotes
+
 def nlp_score_quote(quote: Dict[str, str]) -> Dict[str, Any]:
     analysis = nlp_analyze_quote(quote)
     
