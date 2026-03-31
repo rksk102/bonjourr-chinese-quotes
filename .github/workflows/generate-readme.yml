@@ -20,9 +20,6 @@ jobs:
   generator:
     name: 🚀 Generator Engine
     runs-on: ubuntu-latest
-    env:
-      term: xterm-256color
-      PYTHONUNBUFFERED: "1"
 
     steps:
       - name: 📥 Checkout Code
@@ -30,17 +27,12 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: 🐍 Setup Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       - name: 🔍 System Inspection
         run: |
           echo "::group::🛠️ Environment Info"
           echo "Run ID: $GITHUB_RUN_ID"
           echo "Actor: $GITHUB_ACTOR"
-          python --version
+          python3 --version
           git --version
           echo "::endgroup::"
 
@@ -50,9 +42,7 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           QUOTES_CSV: "quotes.csv"
-        run: |
-          # 运行优化后的脚本
-          python scripts/generate_readme.py
+        run: python3 scripts/generate_readme.py
 
       - name: 📊 Diff & Verify
         id: check_diff

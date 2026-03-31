@@ -14,15 +14,16 @@ def initialize_nlp():
         return True
     
     try:
-        print("🧠 Initializing lightweight NLP models...")
+        print("🧠 Initializing GTE-large-zh NLP model...")
         
         from sentence_transformers import SentenceTransformer
         
-        print("📥 Loading Chinese text embedding model...")
-        embedder = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2', device='cpu')
+        print("📥 Loading GTE-large-zh (Alibaba DAMO Academy)...")
+        print("   Model size: ~670MB | Dimension: 1024 | C-MTEB Score: 66.72")
+        embedder = SentenceTransformer('thenlper/gte-large-zh', device='cpu')
         
         MODEL_LOADED = True
-        print("✅ NLP models initialized successfully!")
+        print("✅ GTE-large-zh model loaded successfully!")
         return True
         
     except Exception as e:
@@ -137,16 +138,33 @@ def nlp_score_quote(quote: Dict[str, str]) -> Dict[str, Any]:
 
 
 if __name__ == "__main__":
-    print("Testing NLP scorer...")
+    print("=" * 60)
+    print("Testing GTE-large-zh NLP scorer...")
+    print("=" * 60)
     initialize_nlp()
     
     test_quotes = [
         {'text': '海内存知己，天涯若比邻', 'author': '王勃'},
         {'text': '人生自古谁无死', 'author': '文天祥'},
         {'text': '好好学习天天向上', 'author': '佚名'},
+        {'text': '路漫漫其修远兮', 'author': '屈原'},
+        {'text': '天下兴亡匹夫有责', 'author': '顾炎武'},
     ]
     
-    for quote in test_quotes:
-        print(f"\n📝 {quote['text']} —— {quote['author']}")
+    print("\n" + "=" * 60)
+    print("Testing semantic similarity (deduplication):")
+    print("=" * 60)
+    
+    for i, quote in enumerate(test_quotes):
+        print(f"\n📝 {i+1}. {quote['text']} —— {quote['author']}")
         score = nlp_score_quote(quote)
         print(f"   NLP Score: {score}")
+    
+    if len(test_quotes) >= 2:
+        print("\n" + "=" * 60)
+        print("Semantic Similarity Matrix:")
+        print("=" * 60)
+        for i in range(len(test_quotes)):
+            for j in range(i+1, len(test_quotes)):
+                sim = calculate_semantic_similarity(test_quotes[i]['text'], test_quotes[j]['text'])
+                print(f"{test_quotes[i]['text'][:6]}... <-> {test_quotes[j]['text'][:6]}... : {sim:.3f}")

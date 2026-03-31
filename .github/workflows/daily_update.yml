@@ -43,13 +43,26 @@ jobs:
           fi
           echo "::endgroup::"
 
+      - name: 🗄️ Cache NLP Models
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/huggingface
+            ~/.cache/torch
+          key: ${{ runner.os }}-gte-large-zh-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-gte-large-zh-
+            ${{ runner.os }}-nlp-models-
+
       - name: 🐍 Run Extraction Script
         id: run_script
+        timeout-minutes: 20
         run: python scripts/update.py
         env:
           PYTHONIOENCODING: utf-8
           MAX_QUOTE_LENGTH: "15"
           USE_NLP: "true"
+          HF_HOME: ~/.cache/huggingface
 
       - name: 📊 Verify Data Integrity
         if: success()
