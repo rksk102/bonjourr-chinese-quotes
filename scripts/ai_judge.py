@@ -82,16 +82,13 @@ def judge_quote_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
             "Content-Type": "application/json"
         }
         
-        prompt = QUOTE_JUDGE_PROMPT.format(text=text, author=author)
+        full_prompt = "你是一位专业的语录鉴赏专家，只返回JSON格式。\n\n" + QUOTE_JUDGE_PROMPT.format(text=text, author=author)
         
         data = {
             "model": OPENROUTER_MODEL,
             "messages": [
-                {"role": "system", "content": "你是一位专业的语录鉴赏专家，只返回JSON格式。"},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.3,
-            "max_tokens": 500
+                {"role": "user", "content": full_prompt}
+            ]
         }
         
         with httpx.Client(timeout=30.0) as client:
@@ -147,17 +144,13 @@ def quick_judge_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
             "Content-Type": "application/json"
         }
         
-        prompt = SIMPLE_QUOTE_JUDGE_PROMPT.format(text=text, author=author)
+        full_prompt = "只返回JSON格式。\n\n" + SIMPLE_QUOTE_JUDGE_PROMPT.format(text=text, author=author)
         
         data = {
             "model": OPENROUTER_MODEL,
             "messages": [
-                {"role": "system", "content": "只返回JSON格式。"},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.2,
-            "max_tokens": 200,
-            "response_format": {"type": "json_object"}
+                {"role": "user", "content": full_prompt}
+            ]
         }
         
         with httpx.Client(timeout=20.0) as client:
