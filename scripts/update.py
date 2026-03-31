@@ -11,7 +11,14 @@ import re
 from datetime import datetime
 
 try:
-    from nlp_scorer import initialize_nlp, nlp_score_quote, deduplicate_quotes
+    from nlp_scorer import (
+        initialize_nlp, 
+        nlp_score_quote, 
+        deduplicate_quotes,
+        smart_categorize_quote,
+        filter_quotes_by_quality,
+        nlp_analyze_quote
+    )
     NLP_AVAILABLE = True
 except ImportError:
     NLP_AVAILABLE = False
@@ -193,8 +200,16 @@ def calculate_score(quote, source_name):
     return min(max(score, 0), 100)
 
 def categorize_quote(quote, source_name):
-    text = quote['text']
-    author = quote['author']
+    if NLP_AVAILABLE:
+        try:
+            category, confidence = smart_categorize_quote(quote)
+            if confidence > 0.5:
+                return category
+        except:
+            pass
+    
+    text = quote.get('text', '')
+    author = quote.get('author', '')
     
     poetry_score = sum(1 for kw in POETRY_KEYWORDS if kw in text or kw in author)
     if poetry_score > 0 or "诗词" in source_name or "诗" in source_name:
@@ -471,9 +486,21 @@ def generate_report(new_quotes, total_count, removed_count):
     if not summary_path: return
     
     category_dist = {}
+    sentiment_dist = {'positive': 0, 'neutral': 0, 'negative': 0}
+    quality_dist = {'A': 0, 'B': 0, 'C': 0, 'D': 0}
+    
     for q in new_quotes:
-        cat = q['category']
+        cat = q.get('category', 'other')
         category_dist[cat] = category_dist.get(cat, 0) + 1
+        
+        if 'nlp_analysis' in q:
+            analysis = q['nlp_analysis']
+            sentiment = analysis.get('sentiment', 'neutral')
+            sentiment_dist[sentiment] = sentiment_dist.get(sentiment, 0) + 1
+            
+            quality = analysis.get('quality', {})
+            grade = quality.get('grade', 'D')
+            quality_dist[grade] = quality_dist.get(grade, 0) + 1
     
     with open(summary_path, 'w', encoding='utf-8') as f:
         f.write("# ✨ 语录自动更新报告\n")
@@ -487,6 +514,22 @@ def generate_report(new_quotes, total_count, removed_count):
         cat_names = {'poetry': '古诗词', 'philosophy': '哲学/名言', 'literature': '文学', 'other': '其他'}
         for cat, cnt in category_dist.items():
             f.write(f"| {cat_names.get(cat, cat)} | {cnt} |\n")
+        
+        if NLP_AVAILABLE and any(sentiment_dist.values()):
+            f.write("\n### 😊 情感分布\n")
+            f.write("| 情感 | 数量 |\n")
+            f.write("| :--- | :---: |\n")
+            sentiment_names = {'positive': '积极', 'neutral': '中性', 'negative': '消极'}
+            for sent, cnt in sentiment_dist.items():
+                if cnt > 0:
+                    f.write(f"| {sentiment_names.get(sent, sent)} | {cnt} |\n")
+            
+            f.write("\n### ⭐ 质量分布\n")
+            f.write("| 等级 | 数量 |\n")
+            f.write("| :--- | :---: |\n")
+            for grade, cnt in quality_dist.items():
+                if cnt > 0:
+                    f.write(f"| {grade}级 | {cnt} |\n")
         
         f.write("\n### 📡 API 统计\n| 接口名称 | 成功 | 低分过滤 | 非中文过滤 | 太长/太短 | 失败 |\n| :--- | :---: | :---: | :---: | :---: | :---: |\n")
         for name, data in stats_tracker.api_calls.items():
@@ -514,8 +557,21 @@ if __name__ == "__main__":
                 deduplicated = original_count - len(new_list)
                 if deduplicated > 0:
                     Log.info(f"Removed {deduplicated} semantic duplicates")
+                
+                Log.info("🎯 Filtering quotes by quality (min grade: C)...")
+                original_count = len(new_list)
+                new_list = filter_quotes_by_quality(new_list, min_grade='C')
+                filtered = original_count - len(new_list)
+                if filtered > 0:
+                    Log.info(f"Filtered {filtered} low-quality quotes")
+                
+                Log.info("📊 Analyzing quotes with NLP...")
+                for quote in new_list:
+                    analysis = nlp_analyze_quote(quote)
+                    quote['nlp_analysis'] = analysis
+                    
             except Exception as e:
-                Log.warning(f"NLP deduplication skipped: {e}")
+                Log.warning(f"NLP processing skipped: {e}")
         
         if new_list:
             kept_rows = prune_rows(old_rows, len(new_list))
