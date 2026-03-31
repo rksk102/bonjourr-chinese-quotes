@@ -4,7 +4,7 @@ import httpx
 from typing import Dict, Any, Optional
 
 OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '')
-OPENROUTER_MODEL = os.environ.get('OPENROUTER_MODEL', 'meta-llama/llama-3.1-8b-instruct:free')
+OPENROUTER_MODEL = os.environ.get('OPENROUTER_MODEL', 'qwen/qwen-2.5-72b-instruct:free')
 OPENROUTER_BASE_URL = os.environ.get('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1')
 USE_OPENROUTER = os.environ.get('USE_AI_JUDGE', 'false').lower() == 'true'
 
@@ -78,7 +78,7 @@ def judge_quote_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
         headers = {
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
             "HTTP-Referer": "https://github.com",
-            "X-Title": "Bonjourr Chinese Quotes",
+            "X-OpenRouter-Title": "Bonjourr Chinese Quotes",
             "Content-Type": "application/json"
         }
         
@@ -143,7 +143,7 @@ def quick_judge_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
         headers = {
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
             "HTTP-Referer": "https://github.com",
-            "X-Title": "Bonjourr Chinese Quotes",
+            "X-OpenRouter-Title": "Bonjourr Chinese Quotes",
             "Content-Type": "application/json"
         }
         
