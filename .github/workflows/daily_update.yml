@@ -56,13 +56,16 @@ jobs:
 
       - name: 🐍 Run Extraction Script
         id: run_script
-        timeout-minutes: 20
+        timeout-minutes: 30
         run: python scripts/update.py
         env:
           PYTHONIOENCODING: utf-8
           MAX_QUOTE_LENGTH: "15"
           USE_NLP: "true"
+          USE_AI_JUDGE: "true"
           HF_HOME: ~/.cache/huggingface
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_MODEL: ${{ secrets.OPENROUTER_MODEL }}
 
       - name: 📊 Verify Data Integrity
         if: success()

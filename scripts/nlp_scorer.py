@@ -4,9 +4,25 @@ import numpy as np
 from typing import Dict, Any, Optional, List, Tuple
 
 USE_NLP = os.environ.get('USE_NLP', 'false').lower() == 'true'
+USE_AI_JUDGE = os.environ.get('USE_AI_JUDGE', 'false').lower() == 'true'
+
+try:
+    from ai_judge import judge_quote_with_ai, get_env_config
+    AI_JUDGE_AVAILABLE = True
+except ImportError:
+    AI_JUDGE_AVAILABLE = False
+    print("⚠️  AI judge module not available")
 
 MODEL_LOADED = False
 embedder = None
+
+AI_STATS = {
+    'ai_available': False,
+    'ai_success_count': 0,
+    'ai_fail_count': 0,
+    'nlp_fallback_count': 0,
+    'model_used': None
+}
 
 CATEGORY_EXAMPLES = {
     'poetry': [
@@ -70,18 +86,34 @@ THEME_KEYWORDS = {
     '时光': ['岁月', '时光', '年华', '青春', '往事', '回忆', '流年', '光阴']
 }
 
-SENTIMENT_POSITIVE = [
+SENTIMENT_POSITIVE_STRONG = [
     '爱', '美', '善', '真', '好', '喜', '乐', '福', '安', '康',
     '希望', '光明', '温暖', '幸福', '快乐', '美好', '成功', '胜利',
     '勇敢', '坚强', '智慧', '善良', '真诚', '友爱', '和谐', '圆满',
-    '春', '花', '月', '阳光', '彩虹', '星辰', '黎明', '朝阳'
+    '鞠躬尽瘁', '死而后已', '精忠报国', '忧国忧民', '舍生取义',
+    '杀身成仁', '大义凛然', '视死如归', '宁死不屈', '坚贞不屈'
+]
+
+SENTIMENT_POSITIVE = [
+    '春', '花', '月', '阳光', '彩虹', '星辰', '黎明', '朝阳',
+    '努力', '奋斗', '坚持', '梦想', '拼搏', '进取', '向上', '自强'
+]
+
+SENTIMENT_NEGATIVE_STRONG = [
+    '恨', '怨', '愁', '悲', '痛', '伤', '泪', '绝望', '黑暗',
+    '寒冷', '孤独', '悲伤', '痛苦', '恐惧', '愤怒', '嫉妒', '贪婪',
+    '仇恨', '战争', '灾难', '悲剧', '毁灭', '失败', '灭亡'
 ]
 
 SENTIMENT_NEGATIVE = [
-    '恨', '怨', '愁', '悲', '苦', '痛', '伤', '泪', '死', '亡',
-    '绝望', '黑暗', '寒冷', '孤独', '悲伤', '痛苦', '失败', '毁灭',
-    '恐惧', '愤怒', '嫉妒', '贪婪', '仇恨', '战争', '灾难', '悲剧',
     '秋', '落叶', '黄昏', '黑夜', '阴霾', '风雨', '寒冬', '暮色'
+]
+
+POSITIVE_PHRASES = [
+    '鞠躬尽瘁', '死而后已', '精忠报国', '忧国忧民', '舍生取义',
+    '杀身成仁', '大义凛然', '视死如归', '宁死不屈', '坚贞不屈',
+    '天下兴亡', '匹夫有责', '先天下之忧', '后天下之乐', '人生自古谁无死',
+    '留取丹心照汗青', '路漫漫其修远兮', '吾将上下而求索'
 ]
 
 QUALITY_INDICATORS = {
@@ -121,6 +153,47 @@ def initialize_nlp():
         print(f"⚠️  Could not load NLP models: {e}")
         print("💡 Falling back to rule-based scoring only.")
         return False
+
+def initialize_ai_judge():
+    global AI_STATS
+    
+    if not USE_AI_JUDGE or not AI_JUDGE_AVAILABLE:
+        AI_STATS['ai_available'] = False
+        return False
+    
+    try:
+        config = get_env_config()
+        print("🤖 Checking OpenRouter AI Judge...")
+        print(f"   Model configured: {config['model']}")
+        print(f"   Has API Key: {'✅' if config['has_api_key'] else '❌'}")
+        
+        if config['has_api_key']:
+            AI_STATS['ai_available'] = True
+            AI_STATS['model_used'] = config['model']
+            print("✅ OpenRouter AI Judge ready!")
+            return True
+        else:
+            AI_STATS['ai_available'] = False
+            print("⚠️  No OpenRouter API key found, using NLP fallback")
+            return False
+            
+    except Exception as e:
+        AI_STATS['ai_available'] = False
+        print(f"⚠️  OpenRouter AI Judge init failed: {e}")
+        return False
+
+def get_ai_stats() -> Dict[str, Any]:
+    return AI_STATS.copy()
+
+def reset_ai_stats():
+    global AI_STATS
+    AI_STATS = {
+        'ai_available': False,
+        'ai_success_count': 0,
+        'ai_fail_count': 0,
+        'nlp_fallback_count': 0,
+        'model_used': None
+    }
 
 _category_embeddings = {}
 
@@ -183,8 +256,26 @@ def smart_categorize_quote(quote: Dict[str, str]) -> Tuple[str, float]:
         return 'other', 0.0
 
 def analyze_sentiment(text: str) -> Dict[str, Any]:
-    positive_count = sum(1 for word in SENTIMENT_POSITIVE if word in text)
-    negative_count = sum(1 for word in SENTIMENT_NEGATIVE if word in text)
+    has_positive_phrase = any(phrase in text for phrase in POSITIVE_PHRASES)
+    if has_positive_phrase:
+        return {
+            'sentiment': 'positive',
+            'positive_score': 0.95,
+            'negative_score': 0.05,
+            'positive_words': 1,
+            'negative_words': 0
+        }
+    
+    positive_count = sum(1 for word in SENTIMENT_POSITIVE_STRONG if word in text)
+    positive_count += sum(0.5 for word in SENTIMENT_POSITIVE if word in text)
+    
+    negative_count = sum(1 for word in SENTIMENT_NEGATIVE_STRONG if word in text)
+    negative_count += sum(0.3 for word in SENTIMENT_NEGATIVE if word in text)
+    
+    if '死' in text:
+        if any(phrase in text for phrase in ['鞠躬尽瘁', '死而后已', '精忠报国', '舍生取义', '杀身成仁', '视死如归', '宁死不屈']):
+            negative_count -= 2
+            positive_count += 2
     
     total = positive_count + negative_count
     if total == 0:
@@ -220,8 +311,40 @@ def identify_themes(text: str) -> List[Tuple[str, float]]:
     return themes[:3]
 
 def assess_quality(quote: Dict[str, str]) -> Dict[str, Any]:
+    global AI_STATS
+    
     text = quote.get('text', '')
     author = quote.get('author', '')
+    
+    if USE_AI_JUDGE and AI_JUDGE_AVAILABLE and AI_STATS.get('ai_available', False):
+        try:
+            ai_result = judge_quote_with_ai(quote)
+            if ai_result:
+                AI_STATS['ai_success_count'] += 1
+                ai_score = ai_result.get('overall_score', 0) / 100.0
+                ai_should_keep = ai_result.get('should_keep', True)
+                ai_reasoning = ai_result.get('reasoning', '')
+                
+                grade = 'A' if ai_score > 0.8 else 'B' if ai_score > 0.6 else 'C' if ai_score > 0.4 else 'D'
+                
+                return {
+                    'total_score': round(ai_score, 3),
+                    'breakdown': {
+                        'ai_judged': True,
+                        'should_keep': ai_should_keep,
+                        'reasoning': ai_reasoning
+                    },
+                    'grade': grade,
+                    'ai_category': ai_result.get('category', 'other'),
+                    'is_famous': ai_result.get('is_famous', False)
+                }
+        except Exception as e:
+            AI_STATS['ai_fail_count'] += 1
+            AI_STATS['nlp_fallback_count'] += 1
+            print(f"⚠️  AI judge failed, falling back to rule-based: {e}")
+    else:
+        if AI_STATS.get('ai_available', False):
+            AI_STATS['nlp_fallback_count'] += 1
     
     scores = {}
     
@@ -395,13 +518,11 @@ if __name__ == "__main__":
     initialize_nlp()
     
     test_quotes = [
-        {'text': '海内存知己，天涯若比邻', 'author': '王勃'},
+        {'text': '臣鞠躬尽瘁，死而后已', 'author': '诸葛亮'},
         {'text': '人生自古谁无死', 'author': '文天祥'},
         {'text': '好好学习天天向上', 'author': '佚名'},
         {'text': '路漫漫其修远兮，吾将上下而求索', 'author': '屈原'},
         {'text': '天下兴亡匹夫有责', 'author': '顾炎武'},
-        {'text': '悲伤逆流成河', 'author': '郭敬明'},
-        {'text': '愿你出走半生，归来仍是少年', 'author': '佚名'},
     ]
     
     print("\n" + "=" * 60)

@@ -18,7 +18,9 @@ try:
         smart_categorize_quote,
         filter_quotes_by_quality,
         filter_negative_quotes,
-        nlp_analyze_quote
+        nlp_analyze_quote,
+        initialize_ai_judge,
+        get_ai_stats
     )
     NLP_AVAILABLE = True
 except ImportError:
@@ -501,6 +503,8 @@ def generate_report(new_quotes, total_count, removed_count):
     quality_dist = {'A': 0, 'B': 0, 'C': 0, 'D': 0}
     theme_dist = {}
     
+    ai_stats = get_ai_stats() if NLP_AVAILABLE else None
+    
     for q in new_quotes:
         cat = q.get('category', 'other')
         category_dist[cat] = category_dist.get(cat, 0) + 1
@@ -523,6 +527,19 @@ def generate_report(new_quotes, total_count, removed_count):
     
     with open(summary_path, 'w', encoding='utf-8') as f:
         f.write("# ✨ 语录自动更新报告\n\n")
+        
+        if ai_stats:
+            f.write("## 🤖 AI 评估系统状态\n")
+            ai_available = ai_stats.get('ai_available', False)
+            f.write(f"| AI评估器状态: {'✅ 运行中' if ai_available else '❌ 未启用'}\n")
+            if ai_available:
+                f.write(f"\n**使用的模型**: `{ai_stats.get('model_used', 'unknown')}`\n")
+                f.write(f"\n| 指标 | 数量 |\n")
+                f.write(f"| :--- | :---: |\n")
+                f.write(f"| AI成功评估 | {ai_stats.get('ai_success_count', 0)} |\n")
+                f.write(f"| AI失败次数 | {ai_stats.get('ai_fail_count', 0)} |\n")
+                f.write(f"| NLP回退次数 | {ai_stats.get('nlp_fallback_count', 0)} |\n")
+            f.write("\n")
         
         f.write("## 📈 总体统计\n")
         f.write(f"| 今日新增 | 今日移除 | 库存总量 | 长度限制 | 评分阈值 |\n")
@@ -635,6 +652,7 @@ if __name__ == "__main__":
     try:
         if NLP_AVAILABLE:
             initialize_nlp()
+            initialize_ai_judge()
         
         old_rows = load_existing_quotes()
         new_list = fetch_new_quotes(TARGET_COUNT, old_rows)
@@ -670,19 +688,29 @@ if __name__ == "__main__":
                 if len(negative_quotes) > 0:
                     Log.info(f"Filtered {len(negative_quotes)} negative quotes")
                 
-                Log.info("🎯 Filtering quotes by quality (min grade: C)...")
+                Log.info("🎯 Filtering quotes by AI judge and quality...")
                 original_count = len(new_list)
                 filtered_list = []
                 for quote in new_list:
                     quality = nlp_analyze_quote(quote).get('quality', {})
                     grade = quality.get('grade', 'D')
                     score = quality.get('total_score', 0)
+                    breakdown = quality.get('breakdown', {})
                     
-                    if grade in ['A', 'B', 'C']:
+                    should_keep = True
+                    ai_judged = False
+                    if 'ai_judged' in breakdown and 'should_keep' in breakdown:
+                        should_keep = breakdown['should_keep']
+                        ai_judged = True
+                    
+                    if should_keep and grade in ['A', 'B', 'C']:
                         quote['quality_grade'] = grade
                         quote['quality_score'] = score
+                        quote['ai_should_keep'] = should_keep
+                        quote['ai_judged'] = ai_judged
                         filtered_list.append(quote)
                     else:
+                        reason = f"AI judge: {should_keep}, Grade: {grade}"
                         stats_tracker.add_low_quality(quote, grade, score)
                 
                 new_list = filtered_list
