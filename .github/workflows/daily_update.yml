@@ -27,9 +27,21 @@ jobs:
           
           echo -e "\033[36m"
           echo "============================================"
-          echo "      ✨ DAILY QUOTES UPDATER v2.1 ✨       "
+          echo "      ✨ DAILY QUOTES UPDATER v3.0 ✨       "
           echo "============================================"
           echo -e "\033[0m"
+
+      - name: 📦 Install Dependencies
+        run: |
+          echo "::group::📦 Installing Python Packages"
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            echo "Installing from requirements.txt..."
+            pip install -r requirements.txt
+          else
+            echo "No requirements.txt found"
+          fi
+          echo "::endgroup::"
 
       - name: 🐍 Run Extraction Script
         id: run_script
@@ -37,6 +49,7 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
           MAX_QUOTE_LENGTH: "15"
+          USE_NLP: "true"
 
       - name: 📊 Verify Data Integrity
         if: success()

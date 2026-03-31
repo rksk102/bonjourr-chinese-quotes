@@ -10,9 +10,16 @@ import concurrent.futures
 import re
 from datetime import datetime
 
+try:
+    from nlp_scorer import initialize_nlp, nlp_score_quote, deduplicate_quotes
+    NLP_AVAILABLE = True
+except ImportError:
+    NLP_AVAILABLE = False
+    print("⚠️  NLP module not available, using rule-based scoring only")
+
 TARGET_COUNT = 15
-MAX_LENGTH = 30
-MIN_LENGTH = 5
+MAX_LENGTH = 15
+MIN_LENGTH = 3
 OUTPUT_FILE = "quotes.csv"
 MAX_WORKERS = 5
 REQUEST_TIMEOUT = 10
@@ -26,8 +33,8 @@ CATEGORY_TARGETS = {
 }
 
 BLACKLIST_WORDS = [
-    "卧槽", "尼玛", "傻逼", "操", "靠", "妈的", "老子", 
-    "劳资", "日", "草", "滚", "去死", "垃圾", "废物",
+    "卧槽", "尼玛", "傻逼", "妈的", "老子", 
+    "劳资", "草", "滚", "去死", "垃圾", "废物",
     "傻逼", "智障", "白痴", "弱智", "脑残",
     "打钱", "赚钱", "加盟", "代理", "推广", "广告",
     "加微信", "加好友", "扫码", "关注", "公众号"
@@ -70,6 +77,63 @@ BEAUTIFUL_WORDS = [
     "优雅", "高贵", "纯洁", "真诚", "善良", "勇敢", "坚强"
 ]
 
+WISDOM_KEYWORDS = [
+    "知", "智", "慧", "悟", "道", "理", "明", "觉", "思", "省",
+    "心", "性", "命", "运", "缘", "空", "色", "寂", "静", "定",
+    "取舍", "进退", "得失", "成败", "荣辱", "贵贱", "贫富",
+    "生死", "别离", "聚散", "因缘", "果报", "轮回", "解脱",
+    "放下", "执着", "分别", "妄想", "烦恼", "菩提", "涅槃",
+    "自知", "知人", "知足", "知止", "知己", "知彼", "知命",
+    "明理", "明道", "见性", "明心", "见道", "悟道", "证道",
+    "修身", "养性", "齐家", "治国", "平天下", "格物", "致知",
+    "诚意", "正心", "慎独", "自省", "自察", "自觉", "自悟",
+    "淡泊", "宁静", "致远", "明志", "弘毅", "致远", "博学",
+    "审问", "慎思", "明辨", "笃行", "勤学", "好问", "善思",
+    "真理", "正义", "良知", "良心", "道德", "仁义", "礼智",
+    "诚信", "忠恕", "孝悌", "廉耻", "气节", "风骨", "操守"
+]
+
+POSITIVE_WORDS = [
+    "爱", "善", "美", "真", "诚", "信", "义", "仁", "礼", "智",
+    "希望", "光明", "温暖", "美好", "幸福", "快乐", "喜悦", "安康",
+    "平安", "吉祥", "如意", "圆满", "和谐", "和睦", "和顺", "和畅",
+    "精进", "向上", "向善", "向美", "向好", "向阳", "向光",
+    "勇敢", "坚强", "坚韧", "坚持", "坚定", "坚决", "坚毅",
+    "宽容", "包容", "理解", "体谅", "关怀", "关爱", "关心",
+    "感恩", "感谢", "感激", "感动", "感悟", "感慨", "感念"
+]
+
+def is_all_chinese(text):
+    pattern = re.compile(r'^[\u4e00-\u9fa5，。？！；：""''（）【】、·\s]+$')
+    return bool(pattern.match(text))
+
+def has_wisdom_characteristics(text):
+    wisdom_score = 0
+    
+    wisdom_count = sum(1 for kw in WISDOM_KEYWORDS if kw in text)
+    if wisdom_count >= 2:
+        wisdom_score += 30
+    elif wisdom_count == 1:
+        wisdom_score += 15
+    
+    if text.startswith("不") or text.startswith("无") or text.startswith("莫"):
+        if len(text) >= 6:
+            wisdom_score += 10
+    
+    if "知" in text and "不" in text:
+        wisdom_score += 15
+    if "心" in text and "静" in text:
+        wisdom_score += 15
+    if "道" in text and "理" in text:
+        wisdom_score += 15
+    
+    if len(text) >= 6 and "，" in text:
+        parts = text.split("，")
+        if len(parts) >= 2 and len(parts[0]) >= 2 and len(parts[1]) >= 2:
+            wisdom_score += 10
+    
+    return wisdom_score
+
 def calculate_score(quote, source_name):
     score = 50
     text = quote['text']
@@ -79,12 +143,12 @@ def calculate_score(quote, source_name):
         return 0
     
     length = len(text)
-    if MIN_LENGTH <= length <= 25:
-        score += 20
-    elif 25 < length <= MAX_LENGTH:
-        score += 10
+    if MIN_LENGTH <= length <= 12:
+        score += 25
+    elif 12 < length <= MAX_LENGTH:
+        score += 15
     elif length < MIN_LENGTH or length > MAX_LENGTH:
-        score -= 20
+        score -= 25
     
     poetry_score = sum(1 for kw in POETRY_KEYWORDS if kw in text or kw in author)
     if poetry_score > 0:
@@ -100,15 +164,31 @@ def calculate_score(quote, source_name):
     if literature_score > 0:
         score += 15
     
+    wisdom_score = has_wisdom_characteristics(text)
+    if wisdom_score > 0:
+        score += wisdom_score
+    
+    positive_score = sum(1 for kw in POSITIVE_WORDS if kw in text)
+    score += min(positive_score * 4, 20)
+    
     beautiful_score = sum(1 for kw in BEAUTIFUL_WORDS if kw in text)
-    score += min(beautiful_score * 3, 15)
+    score += min(beautiful_score * 2, 10)
     
     if author not in BLACKLIST_AUTHORS and len(author) > 1:
         score += 5
     
     if "·" in text or "，" in text or "。" in text:
-        if poetry_score > 0:
+        if poetry_score > 0 or wisdom_score > 0:
             score += 10
+    
+    if NLP_AVAILABLE:
+        try:
+            nlp_result = nlp_score_quote(quote)
+            if nlp_result.get('nlp_available', False):
+                nlp_bonus = nlp_result.get('total_nlp_score', 0)
+                score += nlp_bonus
+        except Exception as e:
+            pass
     
     return min(max(score, 0), 100)
 
@@ -134,56 +214,56 @@ API_SOURCES = [
     {
         "name": "一言（官方-诗词）",
         "url": "https://v1.hitokoto.cn/",
-        "params": {"c": "i", "encode": "json", "min_length": 5, "max_length": MAX_LENGTH},
+        "params": {"c": "i", "encode": "json", "min_length": 3, "max_length": MAX_LENGTH},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()},
-        "weight": 3
+        "weight": 4
     },
     {
         "name": "一言（官方-文学）",
         "url": "https://v1.hitokoto.cn/",
-        "params": {"c": "d", "encode": "json", "min_length": 5, "max_length": MAX_LENGTH},
+        "params": {"c": "d", "encode": "json", "min_length": 3, "max_length": MAX_LENGTH},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()},
-        "weight": 2
+        "weight": 3
     },
     {
         "name": "一言（官方-哲学）",
         "url": "https://v1.hitokoto.cn/",
-        "params": {"c": "k", "encode": "json", "min_length": 5, "max_length": MAX_LENGTH},
+        "params": {"c": "k", "encode": "json", "min_length": 3, "max_length": MAX_LENGTH},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()},
-        "weight": 2
+        "weight": 3
     },
     {
         "name": "一言（官方-动画）",
         "url": "https://v1.hitokoto.cn/",
-        "params": {"c": "a", "encode": "json", "min_length": 5, "max_length": MAX_LENGTH},
+        "params": {"c": "a", "encode": "json", "min_length": 3, "max_length": MAX_LENGTH},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()},
         "weight": 1
     },
     {
         "name": "一言（官方-漫画）",
         "url": "https://v1.hitokoto.cn/",
-        "params": {"c": "b", "encode": "json", "min_length": 5, "max_length": MAX_LENGTH},
+        "params": {"c": "b", "encode": "json", "min_length": 3, "max_length": MAX_LENGTH},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()},
         "weight": 1
     },
     {
         "name": "一言（官方-影视）",
         "url": "https://v1.hitokoto.cn/",
-        "params": {"c": "h", "encode": "json", "min_length": 5, "max_length": MAX_LENGTH},
+        "params": {"c": "h", "encode": "json", "min_length": 3, "max_length": MAX_LENGTH},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()},
         "weight": 1
     },
     {
         "name": "一言（官方-网易云）",
         "url": "https://v1.hitokoto.cn/",
-        "params": {"c": "j", "encode": "json", "min_length": 5, "max_length": MAX_LENGTH},
+        "params": {"c": "j", "encode": "json", "min_length": 3, "max_length": MAX_LENGTH},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()},
         "weight": 1
     },
     {
         "name": "一言（官方-原创）",
         "url": "https://v1.hitokoto.cn/",
-        "params": {"c": "e", "encode": "json", "min_length": 5, "max_length": MAX_LENGTH},
+        "params": {"c": "e", "encode": "json", "min_length": 3, "max_length": MAX_LENGTH},
         "parser": lambda data: {"text": data.get("hitokoto", "").strip(), "author": data.get("from", "佚名").strip()},
         "weight": 1
     },
@@ -192,7 +272,7 @@ API_SOURCES = [
         "url": "https://api.apiopen.top/api/sentences",
         "params": {},
         "parser": lambda data: {"text": data.get("result", {}).get("name", "").strip(), "author": data.get("result", {}).get("from", "佚名").strip()},
-        "weight": 3
+        "weight": 4
     },
     {
         "name": "韩小韩（一言镜像）",
@@ -232,12 +312,13 @@ class Log:
 
 class Stats:
     def __init__(self):
-        self.api_calls = {s['name']: {'success': 0, 'fail': 0, 'too_long': 0, 'low_score': 0} for s in API_SOURCES}
+        self.api_calls = {s['name']: {'success': 0, 'fail': 0, 'too_long': 0, 'low_score': 0, 'not_chinese': 0} for s in API_SOURCES}
         self.category_counts = {'poetry': 0, 'philosophy': 0, 'literature': 0, 'other': 0}
     def record_success(self, name): self.api_calls[name]['success'] += 1
     def record_fail(self, name): self.api_calls[name]['fail'] += 1
     def record_too_long(self, name): self.api_calls[name]['too_long'] += 1
     def record_low_score(self, name): self.api_calls[name]['low_score'] += 1
+    def record_not_chinese(self, name): self.api_calls[name]['not_chinese'] += 1
 
 stats_tracker = Stats()
 
@@ -294,6 +375,10 @@ def fetch_one_quote():
             if text:
                 if len(text) > MAX_LENGTH or len(text) < MIN_LENGTH:
                     stats_tracker.record_too_long(source['name'])
+                    return None
+                
+                if not is_all_chinese(text):
+                    stats_tracker.record_not_chinese(source['name'])
                     return None
                 
                 quote = {'text': text, 'author': author, 'source_name': source['name']}
@@ -403,10 +488,10 @@ def generate_report(new_quotes, total_count, removed_count):
         for cat, cnt in category_dist.items():
             f.write(f"| {cat_names.get(cat, cat)} | {cnt} |\n")
         
-        f.write("\n### 📡 API 统计\n| 接口名称 | 成功 | 低分过滤 | 太长/太短 | 失败 |\n| :--- | :---: | :---: | :---: | :---: |\n")
+        f.write("\n### 📡 API 统计\n| 接口名称 | 成功 | 低分过滤 | 非中文过滤 | 太长/太短 | 失败 |\n| :--- | :---: | :---: | :---: | :---: | :---: |\n")
         for name, data in stats_tracker.api_calls.items():
             if any(data.values()):
-                f.write(f"| {name} | {data['success']} | {data.get('low_score', 0)} | {data['too_long']} | {data['fail']} |\n")
+                f.write(f"| {name} | {data['success']} | {data.get('low_score', 0)} | {data.get('not_chinese', 0)} | {data['too_long']} | {data['fail']} |\n")
         
         if new_quotes:
             f.write("\n### 🎲 新增内容预览\n| 评分 | 类别 | 字数 | 语录内容 | 作者 |\n| :---: | :---: | :---: | :--- | :--- |\n")
@@ -415,8 +500,23 @@ def generate_report(new_quotes, total_count, removed_count):
 
 if __name__ == "__main__":
     try:
+        if NLP_AVAILABLE:
+            initialize_nlp()
+        
         old_rows = load_existing_quotes()
         new_list = fetch_new_quotes(TARGET_COUNT, old_rows)
+        
+        if new_list and NLP_AVAILABLE:
+            try:
+                Log.info("🧠 Applying NLP semantic deduplication...")
+                original_count = len(new_list)
+                new_list = deduplicate_quotes(new_list)
+                deduplicated = original_count - len(new_list)
+                if deduplicated > 0:
+                    Log.info(f"Removed {deduplicated} semantic duplicates")
+            except Exception as e:
+                Log.warning(f"NLP deduplication skipped: {e}")
+        
         if new_list:
             kept_rows = prune_rows(old_rows, len(new_list))
             final_rows = kept_rows + new_list
