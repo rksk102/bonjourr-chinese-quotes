@@ -64,8 +64,8 @@ jobs:
           USE_NLP: "true"
           USE_AI_JUDGE: "true"
           HF_HOME: ~/.cache/huggingface
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          OPENROUTER_MODEL: ${{ secrets.OPENROUTER_MODEL }}
+          AIHUBMIX_API_KEY: ${{ secrets.AIHUBMIX_API_KEY }}
+          AIHUBMIX_MODEL: ${{ secrets.AIHUBMIX_MODEL }}
 
       - name: 📊 Verify Data Integrity
         if: success()

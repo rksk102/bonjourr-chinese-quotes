@@ -34,6 +34,8 @@ OUTPUT_FILE = "quotes.csv"
 MAX_WORKERS = 5
 REQUEST_TIMEOUT = 10
 SCORE_THRESHOLD = 60
+AI_RATE_LIMIT = 2
+AI_RATE_LIMIT_PERIOD = 60
 
 CATEGORY_TARGETS = {
     "poetry": 0.25,
@@ -424,13 +426,14 @@ def fetch_one_quote():
         stats_tracker.record_fail(source['name'])
     return None
 
-def fetch_new_quotes(target, existing_rows):
+def fetch_exact_quotes(target, existing_rows):
     new_quotes = []
     existing_keys = {f"{r['text']}-{r['author']}" for r in existing_rows}
     consecutive_failures = 0
     
     target_total = len(existing_rows) + target
-    Log.info(f"Target: {target} | Limit: {MIN_LENGTH}-{MAX_LENGTH}字 | Score Threshold: {SCORE_THRESHOLD}")
+    Log.info(f"🎯 开始抓取 {target} 条语录")
+    Log.info(f"Limit: {MIN_LENGTH}-{MAX_LENGTH}字 | Score Threshold: {SCORE_THRESHOLD}")
     
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         while len(new_quotes) < target and consecutive_failures < 150:
@@ -452,21 +455,97 @@ def fetch_new_quotes(target, existing_rows):
                             existing_keys.add(u_key)
                             stats_tracker.category_counts[cat] += 1
                             round_success = True
-                            sys.stdout.write(f"\r🚀 Progress: {len(new_quotes)}/{target} | {res['category']}({res['score']}分)")
+                            sys.stdout.write(f"\r🚀 抓取进度: {len(new_quotes)}/{target} | {res['category']}({res['score']}分)")
                             sys.stdout.flush()
             
             consecutive_failures = 0 if round_success else consecutive_failures + 1
     
     print()
     new_quotes.sort(key=lambda x: x['score'], reverse=True)
-    return new_quotes[:target]
+    Log.success(f"✅ 抓取完成，共获取 {len(new_quotes)} 条语录")
+    return new_quotes
+
+def evaluate_quotes_with_rate_limit(quotes):
+    evaluated_quotes = []
+    negative_quotes = []
+    ai_request_times = []
+    
+    Log.info("🧠 开始AI/NLP评估语录...")
+    
+    for i, quote in enumerate(quotes):
+        Log.info(f"📝 评估第 {i+1}/{len(quotes)} 条语录: {quote['text']}")
+        
+        if NLP_AVAILABLE:
+            try:
+                analysis = nlp_analyze_quote(quote)
+                quality = analysis.get('quality', {})
+                grade = quality.get('grade', 'D')
+                score = quality.get('total_score', 0)
+                breakdown = quality.get('breakdown', {})
+                sentiment = analysis.get('sentiment', 'neutral')
+                
+                should_keep = True
+                ai_judged = False
+                ai_reasoning = ""
+                if 'ai_judged' in breakdown and 'should_keep' in breakdown:
+                    should_keep = breakdown['should_keep']
+                    ai_judged = True
+                    ai_reasoning = breakdown.get('reasoning', '')
+                
+                if ai_judged:
+                    ai_request_times.append(time.time())
+                    if len(ai_request_times) >= AI_RATE_LIMIT:
+                        oldest_time = ai_request_times[-AI_RATE_LIMIT]
+                        time_since = time.time() - oldest_time
+                        if time_since < AI_RATE_LIMIT_PERIOD:
+                            wait_time = AI_RATE_LIMIT_PERIOD - time_since
+                            Log.info(f"⏳ AI速率限制，等待 {wait_time:.1f} 秒...")
+                            time.sleep(wait_time)
+                
+                quote['nlp_analysis'] = analysis
+                quote['sentiment'] = sentiment
+                quote['quality_grade'] = grade
+                quote['quality_score'] = score
+                quote['ai_should_keep'] = should_keep
+                quote['ai_judged'] = ai_judged
+                
+                if ai_judged:
+                    if should_keep and grade in ['A', 'B', 'C']:
+                        evaluated_quotes.append(quote)
+                        Log.success(f"✅ 保留语录: {quote['text']}")
+                    else:
+                        reason = ai_reasoning if ai_reasoning else f"AI judge: {should_keep}, Grade: {grade}"
+                        negative_quotes.append({'quote': quote, 'reason': reason})
+                        stats_tracker.add_negative(quote, reason)
+                        Log.warning(f"🚫 AI过滤语录: {quote['text']} - {reason}")
+                else:
+                    if sentiment == 'negative':
+                        reason = f"情感分析: {sentiment}"
+                        negative_quotes.append({'quote': quote, 'reason': reason})
+                        stats_tracker.add_negative(quote, reason)
+                        Log.warning(f"🚫 NLP过滤消极语录: {quote['text']} - {reason}")
+                    elif grade in ['A', 'B', 'C']:
+                        evaluated_quotes.append(quote)
+                        Log.success(f"✅ 保留语录: {quote['text']}")
+                    else:
+                        reason = f"Grade: {grade}"
+                        stats_tracker.add_low_quality(quote, grade, score)
+                        Log.warning(f"🚫 过滤低质量语录: {quote['text']} - {reason}")
+            except Exception as e:
+                Log.warning(f"⚠️  评估失败: {e}")
+                evaluated_quotes.append(quote)
+        else:
+            evaluated_quotes.append(quote)
+    
+    Log.success(f"✅ 评估完成，保留 {len(evaluated_quotes)} 条语录，过滤 {len(negative_quotes)} 条")
+    return evaluated_quotes, negative_quotes
 
 def prune_rows(rows, count_to_remove):
     if not rows or count_to_remove <= 0:
         return rows
     
     actual_remove = min(len(rows), count_to_remove)
-    Log.warning(f"Pruning {actual_remove} items...")
+    Log.warning(f"✂️  裁剪 {actual_remove} 条旧语录...")
     
     scored_rows = []
     for row in rows:
@@ -545,6 +624,7 @@ def generate_report(new_quotes, total_count, removed_count):
             elif ai_available:
                 f.write(f"| AI评估器状态: {'✅ 运行中'}\n")
                 f.write(f"\n**使用的模型**: `{ai_stats.get('model_used', 'unknown')}`\n")
+                f.write(f"\n**速率限制**: 每{AI_RATE_LIMIT_PERIOD}秒最多{AI_RATE_LIMIT}次请求\n")
                 f.write(f"\n| 指标 | 数量 |\n")
                 f.write(f"| :--- | :---: |\n")
                 f.write(f"| AI成功评估 | {ai_stats.get('ai_success_count', 0)} |\n")
@@ -668,7 +748,8 @@ if __name__ == "__main__":
             initialize_ai_judge()
         
         old_rows = load_existing_quotes()
-        new_list = fetch_new_quotes(TARGET_COUNT, old_rows)
+        
+        new_list = fetch_exact_quotes(TARGET_COUNT, old_rows)
         
         if new_list and NLP_AVAILABLE:
             try:
@@ -693,50 +774,8 @@ if __name__ == "__main__":
                         if i < len(stats_tracker.duplicate_quotes):
                             stats_tracker.add_semantic_duplicate(stats_tracker.duplicate_quotes[i])
                 
-                Log.info("😊 Filtering negative sentiment quotes...")
-                original_count = len(new_list)
-                new_list, negative_quotes = filter_negative_quotes(new_list)
-                for nq in negative_quotes:
-                    stats_tracker.add_negative(nq, nq.get('negative_reason', '消极情感'))
-                if len(negative_quotes) > 0:
-                    Log.info(f"Filtered {len(negative_quotes)} negative quotes")
-                
-                Log.info("🎯 Filtering quotes by AI judge and quality...")
-                original_count = len(new_list)
-                filtered_list = []
-                for quote in new_list:
-                    quality = nlp_analyze_quote(quote).get('quality', {})
-                    grade = quality.get('grade', 'D')
-                    score = quality.get('total_score', 0)
-                    breakdown = quality.get('breakdown', {})
-                    
-                    should_keep = True
-                    ai_judged = False
-                    if 'ai_judged' in breakdown and 'should_keep' in breakdown:
-                        should_keep = breakdown['should_keep']
-                        ai_judged = True
-                    
-                    if should_keep and grade in ['A', 'B', 'C']:
-                        quote['quality_grade'] = grade
-                        quote['quality_score'] = score
-                        quote['ai_should_keep'] = should_keep
-                        quote['ai_judged'] = ai_judged
-                        filtered_list.append(quote)
-                    else:
-                        reason = f"AI judge: {should_keep}, Grade: {grade}"
-                        stats_tracker.add_low_quality(quote, grade, score)
-                
-                new_list = filtered_list
-                filtered = original_count - len(new_list)
-                if filtered > 0:
-                    Log.info(f"Filtered {filtered} low-quality quotes")
-                
-                Log.info("📊 Analyzing quotes with NLP...")
-                for quote in new_list:
-                    analysis = nlp_analyze_quote(quote)
-                    quote['nlp_analysis'] = analysis
-                    quote['sentiment'] = analysis.get('sentiment', 'neutral')
-                    quote['quality_grade'] = analysis.get('quality', {}).get('grade', 'C')
+                Log.info("🎯 Starting quote evaluation with AI/NLP (including sentiment filtering)...")
+                new_list, negative_quotes = evaluate_quotes_with_rate_limit(new_list)
                     
             except Exception as e:
                 Log.warning(f"NLP processing skipped: {e}")

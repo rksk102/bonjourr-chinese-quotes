@@ -3,15 +3,10 @@ import json
 import httpx
 from typing import Dict, Any, Optional
 
-OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '')
-OPENROUTER_MODEL = os.environ.get('OPENROUTER_MODEL', 'qwen/qwen-2.5-72b-instruct:free')
-OPENROUTER_BASE_URL = os.environ.get('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1')
-USE_OPENROUTER = os.environ.get('USE_AI_JUDGE', 'false').lower() == 'true'
-
-# 全局变量：AI失败计数和自动禁用标志
-_ai_fail_count = 0
-_ai_disabled = False
-MAX_AI_FAILURES = 5
+AIHUBMIX_API_KEY = os.environ.get('AIHUBMIX_API_KEY', '')
+AIHUBMIX_MODEL = os.environ.get('AIHUBMIX_MODEL', 'gpt-4o-mini')
+AIHUBMIX_BASE_URL = os.environ.get('AIHUBMIX_BASE_URL', 'https://aihubmix.com/v1')
+USE_AI_JUDGE = os.environ.get('USE_AI_JUDGE', 'false').lower() == 'true'
 
 QUOTE_JUDGE_PROMPT = """你是一位专业的中国文化和语录鉴赏专家。请判断以下语录的质量，并给出评分和评价。
 
@@ -62,13 +57,19 @@ SIMPLE_QUOTE_JUDGE_PROMPT = """判断这条语录是否是好的、积极的、�
 }}"""
 
 
+# 全局变量：AI失败计数和自动禁用标志
+_ai_fail_count = 0
+_ai_disabled = False
+MAX_AI_FAILURES = 5
+
+
 def judge_quote_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
     global _ai_fail_count, _ai_disabled
     
     if _ai_disabled:
         return None
     
-    if not USE_OPENROUTER or not OPENROUTER_API_KEY:
+    if not USE_AI_JUDGE or not AIHUBMIX_API_KEY:
         return None
     
     text = quote.get('text', '')
@@ -76,16 +77,14 @@ def judge_quote_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
     
     try:
         headers = {
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "HTTP-Referer": "https://github.com",
-            "X-OpenRouter-Title": "Bonjourr Chinese Quotes",
+            "Authorization": f"Bearer {AIHUBMIX_API_KEY}",
             "Content-Type": "application/json"
         }
         
         full_prompt = "你是一位专业的语录鉴赏专家，只返回JSON格式。\n\n" + QUOTE_JUDGE_PROMPT.format(text=text, author=author)
         
         data = {
-            "model": OPENROUTER_MODEL,
+            "model": AIHUBMIX_MODEL,
             "messages": [
                 {"role": "user", "content": full_prompt}
             ]
@@ -93,7 +92,7 @@ def judge_quote_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
         
         with httpx.Client(timeout=30.0) as client:
             response = client.post(
-                f"{OPENROUTER_BASE_URL}/chat/completions",
+                f"{AIHUBMIX_BASE_URL}/chat/completions",
                 headers=headers,
                 json=data
             )
@@ -103,12 +102,9 @@ def judge_quote_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
                 content = result['choices'][0]['message']['content']
                 print(f"🤖 AI Response: {content}")
                 
-                # 尝试解析JSON，处理可能的格式问题
                 try:
-                    # 尝试直接解析
                     parsed = json.loads(content)
                 except json.JSONDecodeError:
-                    # 尝试清理内容 - 去掉markdown标记
                     cleaned_content = content.strip()
                     if cleaned_content.startswith('```json'):
                         cleaned_content = cleaned_content[7:]
@@ -121,7 +117,6 @@ def judge_quote_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
                     try:
                         parsed = json.loads(cleaned_content)
                     except json.JSONDecodeError:
-                        # 如果还是解析失败，返回默认值
                         print(f"⚠️  Failed to parse AI response, using defaults")
                         parsed = {
                             "is_famous": True,
@@ -136,11 +131,11 @@ def judge_quote_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
                 
                 _ai_fail_count = 0
                 parsed['ai_judged'] = True
-                parsed['model_used'] = OPENROUTER_MODEL
+                parsed['model_used'] = AIHUBMIX_MODEL
                 return parsed
             else:
                 _ai_fail_count += 1
-                print(f"⚠️  OpenRouter API error: {response.status_code}")
+                print(f"⚠️  AIHubMix API error: {response.status_code}")
                 print(f"Response: {response.text}")
                 print(f"   Failure count: {_ai_fail_count}/{MAX_AI_FAILURES}")
                 
@@ -161,7 +156,7 @@ def judge_quote_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
 
 
 def quick_judge_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
-    if not USE_OPENROUTER or not OPENROUTER_API_KEY:
+    if not USE_AI_JUDGE or not AIHUBMIX_API_KEY:
         return None
     
     text = quote.get('text', '')
@@ -169,16 +164,14 @@ def quick_judge_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
     
     try:
         headers = {
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "HTTP-Referer": "https://github.com",
-            "X-OpenRouter-Title": "Bonjourr Chinese Quotes",
+            "Authorization": f"Bearer {AIHUBMIX_API_KEY}",
             "Content-Type": "application/json"
         }
         
         full_prompt = "只返回JSON格式。\n\n" + SIMPLE_QUOTE_JUDGE_PROMPT.format(text=text, author=author)
         
         data = {
-            "model": OPENROUTER_MODEL,
+            "model": AIHUBMIX_MODEL,
             "messages": [
                 {"role": "user", "content": full_prompt}
             ]
@@ -186,7 +179,7 @@ def quick_judge_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
         
         with httpx.Client(timeout=20.0) as client:
             response = client.post(
-                f"{OPENROUTER_BASE_URL}/chat/completions",
+                f"{AIHUBMIX_BASE_URL}/chat/completions",
                 headers=headers,
                 json=data
             )
@@ -207,13 +200,14 @@ def quick_judge_with_ai(quote: Dict[str, str]) -> Optional[Dict[str, Any]]:
 
 def get_env_config() -> Dict[str, Any]:
     return {
-        'use_openrouter': USE_OPENROUTER,
-        'has_api_key': bool(OPENROUTER_API_KEY),
-        'model': OPENROUTER_MODEL,
-        'base_url': OPENROUTER_BASE_URL,
+        'use_openrouter': USE_AI_JUDGE,
+        'has_api_key': bool(AIHUBMIX_API_KEY),
+        'model': AIHUBMIX_MODEL,
+        'base_url': AIHUBMIX_BASE_URL,
         'ai_disabled': _ai_disabled,
         'ai_fail_count': _ai_fail_count
     }
+
 
 def reset_ai_state():
     global _ai_fail_count, _ai_disabled
@@ -223,12 +217,12 @@ def reset_ai_state():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("Testing OpenRouter AI Judge")
+    print("Testing AIHubMix AI Judge")
     print("=" * 60)
     
     config = get_env_config()
     print(f"\n📋 Configuration:")
-    print(f"   USE_OPENROUTER: {config['use_openrouter']}")
+    print(f"   USE_AI_JUDGE: {config['use_openrouter']}")
     print(f"   Has API Key: {config['has_api_key']}")
     print(f"   Model: {config['model']}")
     
@@ -249,4 +243,4 @@ if __name__ == "__main__":
                 print(f"   Category: {result.get('category')}")
                 print(f"   Reasoning: {result.get('reasoning')}")
     else:
-        print("\n⚠️  OpenRouter not configured. Set USE_OPENROUTER=true and OPENROUTER_API_KEY.")
+        print("\n⚠️  AIHubMix not configured. Set USE_AI_JUDGE=true and AIHUBMIX_API_KEY.")
