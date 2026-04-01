@@ -65,7 +65,7 @@ MAX_AI_FAILURES = 5
 
 # 全局变量：AI速率限制
 _ai_request_times = []
-AI_RATE_LIMIT = 2
+AI_RATE_LIMIT = 4
 AI_RATE_LIMIT_PERIOD = 60
 
 
